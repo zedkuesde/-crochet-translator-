@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Tutorial {
+  id        String   @id @default(uuid())
+  name      String?
+  rawText   String
+  createdAt DateTime @default(now())
+  steps     Step[]
+}
+
+model Step {
+  id         String   @id @default(uuid())
+  tutorialId String
+  index      Int
+  label      String
+  createdAt  DateTime @default(now())
+
+  tutorial Tutorial @relation(fields: [tutorialId], references: [id], onDelete: Cascade)
+
+  @@unique([tutorialId, index])
+  @@index([tutorialId])
+}

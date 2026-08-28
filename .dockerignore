@@ -1,0 +1,24 @@
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Next.js
+.next
+out
+
+# Local database and Docker volume
+db.sqlite
+data/*
+!data/.gitkeep
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Git and editor
+.git
+.cursor
+
+# OS
+.DS_Store
