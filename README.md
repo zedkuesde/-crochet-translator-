@@ -57,6 +57,8 @@ npx prisma studio    # interface visuelle de la DB
 
 ## Docker
 
+Le stage `deps` copie `prisma/` avant `npm ci`, car le script `postinstall` lance `prisma generate`.
+
 ### Build
 
 ```bash
