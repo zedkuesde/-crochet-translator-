@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 FROM node:20-alpine AS base
-RUN apk add --no-cache libc6-compat openssl
+RUN apk add --no-cache libc6-compat openssl su-exec
 WORKDIR /app
 
 FROM base AS deps
@@ -17,6 +17,16 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Regenerate after full source copy (build script also runs prisma generate)
 RUN npx prisma generate
 RUN npm run build
+
+# Standalone Next.js does not ship the Prisma CLI. Install it separately so
+# `migrate deploy` has the CLI, transitive deps, and Alpine-compatible engines.
+FROM base AS prisma-cli
+WORKDIR /opt/prisma
+COPY package.json /tmp/app-package.json
+RUN npm init -y >/dev/null \
+  && PRISMA_VERSION=$(node -p "require('/tmp/app-package.json').devDependencies.prisma.replace(/^[^\d]*/, '')") \
+  && npm install "prisma@${PRISMA_VERSION}" --omit=dev \
+  && rm -rf /tmp/app-package.json /root/.npm
 
 FROM base AS runner
 ENV NODE_ENV=production
@@ -34,14 +44,13 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder --chown=nextjs:nodejs /app/scripts/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY --from=prisma-cli /opt/prisma /opt/prisma
+COPY --from=builder /app/scripts/docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN chmod +x /app/docker-entrypoint.sh
 
-USER nextjs
+# Entrypoint starts as root to fix /app/data ownership on bind mounts,
+# then drops privileges to nextjs for migrate + server.
 EXPOSE 3000
 
 CMD ["/app/docker-entrypoint.sh"]

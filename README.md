@@ -57,7 +57,11 @@ npx prisma studio    # interface visuelle de la DB
 
 ## Docker
 
-Le stage `deps` copie `prisma/` avant `npm ci`, car le script `postinstall` lance `prisma generate`.
+Points importants du build multi-stage :
+
+- Le stage `deps` copie `prisma/` avant `npm ci`, car le script `postinstall` lance `prisma generate`.
+- Un stage `prisma-cli` installe le CLI Prisma (avec ses dépendances et moteurs Alpine) hors du bundle Next standalone.
+- Au démarrage, l’entrypoint : crée `/app/data`, corrige les permissions pour l’utilisateur `nextjs` (uid 1001), exécute `prisma migrate deploy`, puis lance `node server.js`.
 
 ### Build
 
@@ -73,7 +77,13 @@ docker compose up -d
 
 Accéder à [http://localhost:3000](http://localhost:3000).
 
-Au démarrage, le conteneur exécute `prisma migrate deploy` puis lance le serveur Next.js standalone.
+### Rebuild sans cache (VPS)
+
+```bash
+docker compose build --no-cache
+docker compose up -d --force-recreate
+docker compose logs -f app
+```
 
 ### Logs et arrêt
 
