@@ -27,3 +27,25 @@ model Step {
   @@unique([tutorialId, index])
   @@index([tutorialId])
 }
+
+model CrochetTerm {
+  id          String             @id @default(uuid())
+  code        String             @unique
+  label       String
+  description String?
+  imagePath   String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  aliases     CrochetTermAlias[]
+}
+
+model CrochetTermAlias {
+  id              String      @id @default(uuid())
+  alias           String
+  aliasNormalized String      @unique
+  termId          String
+  createdAt       DateTime    @default(now())
+  term            CrochetTerm @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  @@index([termId])
+}

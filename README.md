@@ -59,8 +59,11 @@ Le fichier `db.sqlite` est ignoré par Git.
 ```bash
 npm run db:migrate   # prisma migrate dev
 npm run db:deploy    # prisma migrate deploy (prod / Docker)
+npm run db:seed      # seed idempotent des termes de crochet
 npx prisma studio    # interface visuelle de la DB
 ```
+
+Le seed des termes peut être relancé sans créer de doublons. Il ne modifie pas un terme déjà présent (label, description, `imagePath`) et n’écrase jamais un alias créé à la main. Un conflit (alias déjà code ou alias d’un autre terme) est signalé dans la console et l’alias n’est pas créé. Le seed n’est pas exécuté automatiquement au démarrage Docker.
 
 ## Docker
 
@@ -128,6 +131,36 @@ DATABASE_URL=file:/app/data/db.sqlite
 
 Relation : un `Tutorial` possède plusieurs `Step` (1-N).
 
+### `CrochetTerm`
+
+Fiches pédagogiques des abréviations françaises (pas encore utilisées par l’interface).
+
+| Champ         | Type     | Description                                      |
+|---------------|----------|--------------------------------------------------|
+| `id`          | UUID     | Identifiant unique                               |
+| `code`        | string   | Code canonique unique, minuscule (`ms`, `aug`)   |
+| `label`       | string   | Nom complet (`Maille serrée`)                    |
+| `description` | string?  | Explication courte pour débutant                 |
+| `imagePath`   | string?  | Chemin d’image (`/stitches/ms.webp`) ou `null`   |
+| `createdAt`   | datetime | Date de création                                 |
+| `updatedAt`   | datetime | Mis à jour automatiquement                       |
+
+### `CrochetTermAlias`
+
+Variantes d’écriture qui pointent vers une seule fiche.
+
+| Champ             | Type     | Description                                      |
+|-------------------|----------|--------------------------------------------------|
+| `id`              | UUID     | Identifiant unique                               |
+| `alias`           | string   | Forme saisie (`m.s.`, `augm`)                    |
+| `aliasNormalized` | string   | Clé unique (minuscule, espaces compactés, NFC)   |
+| `termId`          | UUID     | Référence vers `CrochetTerm` (cascade)           |
+| `createdAt`       | datetime | Date de création                                 |
+
+Relation : un `CrochetTerm` possède plusieurs `CrochetTermAlias` (1-N). Le `code` du terme est aussi une expression reconnue, sans le dupliquer en alias.
+
+Seed initial (8 termes, `imagePath` toujours `null`) : `ml`, `mc`, `ms`, `db`, `br`, `dbr`, `aug`, `dim`.
+
 ## Routes API
 
 | Méthode | Route                 | Description                               |
@@ -166,9 +199,11 @@ crochet-translator/
 ├── components/               # Composants React réutilisables
 ├── lib/
 │   ├── db/prisma.ts          # Client Prisma singleton
-│   └── tutorials.ts          # Logique métier
+│   ├── tutorials.ts          # Logique métier
+│   └── crochet-terms.ts      # Normalisation des expressions de termes
 ├── prisma/
 │   ├── schema.prisma         # Schéma de données
+│   ├── seed.ts               # Seed idempotent des termes FR
 │   └── migrations/           # Migrations SQL versionnées
 ├── scripts/
 │   └── docker-entrypoint.sh  # Entrypoint Docker
