@@ -1,5 +1,5 @@
 import { CreateTutorialForm } from "@/components/CreateTutorialForm";
-import { PageShell } from "@/components/PageShell";
+import { PageShell, SecondaryButtonLink } from "@/components/PageShell";
 
 export default function HomePage() {
   return (
@@ -13,6 +13,8 @@ export default function HomePage() {
           pourras suivre pas à pas.
         </p>
       </header>
+
+      <SecondaryButtonLink href="/tutorials">Voir mes tutos</SecondaryButtonLink>
 
       <CreateTutorialForm />
     </PageShell>

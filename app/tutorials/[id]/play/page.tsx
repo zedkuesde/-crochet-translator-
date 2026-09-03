@@ -34,9 +34,12 @@ export default async function PlayPage({ params, searchParams }: PlayPageProps) 
 
   return (
     <PageShell>
-      <BackLink href={`/tutorials/${tutorial.id}`}>
-        ← Retour à la liste des étapes
-      </BackLink>
+      <div className="flex flex-col gap-2">
+        <BackLink href={`/tutorials/${tutorial.id}`}>
+          ← Retour à la liste des étapes
+        </BackLink>
+        <BackLink href="/tutorials">Mes tutos</BackLink>
+      </div>
 
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold tracking-tight text-stone-900">

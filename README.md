@@ -19,6 +19,13 @@ Pas d'authentification : chaque tuto est identifié par un UUID accessible via l
 - Lecture pas à pas avec navigation Précédent / Suivant / Terminer
 - Accès au tuto via URL (`/tutorials/[id]`)
 
+## Fonctionnalités V2
+
+- Catalogue de tutos (`/tutorials`) : liste tous les tutos par date décroissante
+- Affichage : nom, nombre d'étapes, date en français
+- Gestion de l'état vide
+- Navigation cohérente entre accueil, catalogue, détail et lecteur
+
 ## Développement local
 
 ### Prérequis
@@ -141,11 +148,12 @@ Réponse : `{"id":"<uuid>"}`
 
 ## Pages UI
 
-| Route                        | Description              |
-|------------------------------|--------------------------|
-| `/`                          | Créer un tuto            |
-| `/tutorials/[id]`            | Liste des étapes         |
-| `/tutorials/[id]/play?step=` | Lecture pas à pas        |
+| Route                        | Description                      |
+|------------------------------|----------------------------------|
+| `/`                          | Créer un tuto                    |
+| `/tutorials`                 | Catalogue de tous les tutos      |
+| `/tutorials/[id]`            | Liste des étapes d'un tuto       |
+| `/tutorials/[id]/play?step=` | Lecture pas à pas                |
 
 ## Structure du projet
 

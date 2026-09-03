@@ -25,7 +25,10 @@ export default async function TutorialPage({ params }: TutorialPageProps) {
 
   return (
     <PageShell>
-      <BackLink href="/">← Retour à l&apos;accueil</BackLink>
+      <div className="flex flex-col gap-2">
+        <BackLink href="/">← Retour à l&apos;accueil</BackLink>
+        <BackLink href="/tutorials">Mes tutos</BackLink>
+      </div>
 
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight text-stone-900">
