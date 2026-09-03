@@ -25,6 +25,7 @@ Pas d'authentification : chaque tuto est identifié par un UUID accessible via l
 - Affichage : nom, nombre d'étapes, date en français
 - Gestion de l'état vide
 - Navigation cohérente entre accueil, catalogue, détail et lecteur
+- Lecteur pas à pas : codes et alias reconnus, fiches d'aide, interrupteur **Afficher les aides**
 
 ## Développement local
 
@@ -60,6 +61,7 @@ Le fichier `db.sqlite` est ignoré par Git.
 npm run db:migrate   # prisma migrate dev
 npm run db:deploy    # prisma migrate deploy (prod / Docker)
 npm run db:seed      # seed idempotent des termes de crochet
+npm test             # matching des termes (node:test)
 npx prisma studio    # interface visuelle de la DB
 ```
 
@@ -133,7 +135,7 @@ Relation : un `Tutorial` possède plusieurs `Step` (1-N).
 
 ### `CrochetTerm`
 
-Fiches pédagogiques des abréviations françaises (pas encore utilisées par l’interface).
+Fiches pédagogiques des abréviations françaises, utilisées dans le lecteur pas à pas.
 
 | Champ         | Type     | Description                                      |
 |---------------|----------|--------------------------------------------------|
@@ -186,7 +188,22 @@ Réponse : `{"id":"<uuid>"}`
 | `/`                          | Créer un tuto                    |
 | `/tutorials`                 | Catalogue de tous les tutos      |
 | `/tutorials/[id]`            | Liste des étapes d'un tuto       |
-| `/tutorials/[id]/play?step=` | Lecture pas à pas                |
+| `/tutorials/[id]/play?step=` | Lecture pas à pas, avec aides sur les termes |
+
+## Aides dans le lecteur
+
+Dans `/tutorials/[id]/play`, les **codes** et **alias** du catalogue (`ms`, `m.s.`, `maille serrée`, `6mc`…) sont mis en évidence et ouvrent une fiche (`<dialog>` natif). Le **label** d’un terme n’est reconnu que s’il existe aussi comme alias.
+
+L’interrupteur **Afficher les aides** (case à cocher) est activé par défaut. Désactivé, le texte d’étape redevient du texte brut. Le réglage est conservé dans `localStorage` (`crochet-translator:show-term-helps`). Les fiches fonctionnent sans image (`imagePath` actuellement `null`).
+
+### Recette manuelle d’accessibilité
+
+1. Ouvrir une fiche à la souris/tap, puis au clavier (Tab jusqu’au terme, Entrée).
+2. Avec Tab et Shift+Tab, vérifier que le focus ne peut pas atteindre le toggle **Afficher les aides**, les boutons **Précédent** / **Suivant**, ni les autres contrôles derrière la modal.
+3. Fermer avec Échap, avec le bouton **Fermer**, et avec un clic/tap sur l’arrière-plan.
+4. Après chaque fermeture, vérifier que le focus revient exactement sur le terme qui a ouvert la fiche.
+5. Refaire ce parcours sur Safari ou un navigateur mobile si disponible.
+6. Si le `<dialog>` natif ne fournit pas ce comportement sur un navigateur cible : ne pas ajouter de bibliothèque ; noter le constat et corriger au minimum.
 
 ## Structure du projet
 
@@ -197,10 +214,15 @@ crochet-translator/
 │   ├── tutorials/[id]/       # Liste + lecteur play
 │   └── page.tsx              # Accueil (formulaire)
 ├── components/               # Composants React réutilisables
+│   ├── TutorialPlayer.tsx    # Lecteur + toggle des aides
+│   ├── StepTermText.tsx      # Texte d'étape avec termes cliquables
+│   └── TermHelpModal.tsx     # Fiche d'aide (<dialog> natif)
 ├── lib/
 │   ├── db/prisma.ts          # Client Prisma singleton
 │   ├── tutorials.ts          # Logique métier
-│   └── crochet-terms.ts      # Normalisation des expressions de termes
+│   ├── terms.ts              # Chargement serveur des termes
+│   ├── crochet-terms.ts      # Normalisation + segmentation
+│   └── crochet-terms.test.ts # Tests du matcher
 ├── prisma/
 │   ├── schema.prisma         # Schéma de données
 │   ├── seed.ts               # Seed idempotent des termes FR

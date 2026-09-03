@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { BackLink, PageShell } from "@/components/PageShell";
 import { TutorialPlayer } from "@/components/TutorialPlayer";
+import { getAllTerms } from "@/lib/terms";
 import { getTutorialById } from "@/lib/tutorials";
 
 type PlayPageProps = {
@@ -23,7 +24,10 @@ function clampStep(stepParam: string | undefined, totalSteps: number): number {
 export default async function PlayPage({ params, searchParams }: PlayPageProps) {
   const { id } = await params;
   const { step: stepParam } = await searchParams;
-  const tutorial = await getTutorialById(id);
+  const [tutorial, terms] = await Promise.all([
+    getTutorialById(id),
+    getAllTerms(),
+  ]);
 
   if (!tutorial) {
     notFound();
@@ -50,8 +54,13 @@ export default async function PlayPage({ params, searchParams }: PlayPageProps) 
 
       <TutorialPlayer
         tutorialId={tutorial.id}
-        steps={tutorial.steps}
+        steps={tutorial.steps.map((step) => ({
+          id: step.id,
+          index: step.index,
+          label: step.label,
+        }))}
         currentStep={currentStep}
+        terms={terms}
       />
     </PageShell>
   );

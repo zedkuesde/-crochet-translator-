@@ -24,3 +24,11 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
+
+dialog {
+  margin: auto;
+}
+
+dialog::backdrop {
+  background: rgb(28 25 23 / 0.45);
+}
