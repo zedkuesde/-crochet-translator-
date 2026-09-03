@@ -4,6 +4,8 @@ Application web V1 pour transformer un patron de crochet collé en tutoriel pas 
 
 Pas d'authentification : chaque tuto est identifié par un UUID accessible via l'URL.
 
+**L’administration des termes (`/admin/terms` et `/api/terms`) n’a aucune authentification dans ce lot.** Elle est destinée à un usage local ou privé. Une URL peu visible n’est **pas** un mécanisme de sécurité. **Il est obligatoire d’ajouter une authentification avant toute exposition publique** de cette application.
+
 ## Stack technique
 
 - **Front** : Next.js 15 (App Router), TypeScript, Tailwind CSS
@@ -26,6 +28,7 @@ Pas d'authentification : chaque tuto est identifié par un UUID accessible via l
 - Gestion de l'état vide
 - Navigation cohérente entre accueil, catalogue, détail et lecteur
 - Lecteur pas à pas : codes et alias reconnus, fiches d'aide, interrupteur **Afficher les aides**
+- Administration locale des termes (`/admin/terms`) : liste, création, édition, alias, suppression — sans Prisma Studio
 
 ## Développement local
 
@@ -62,8 +65,10 @@ npm run db:migrate   # prisma migrate dev
 npm run db:deploy    # prisma migrate deploy (prod / Docker)
 npm run db:seed      # seed idempotent des termes de crochet
 npm test             # matching des termes (node:test)
-npx prisma studio    # interface visuelle de la DB
+npx prisma studio    # interface visuelle de la DB (optionnel)
 ```
+
+L’enrichissement du catalogue de termes se fait dans l’application via **Administrer les termes** (`/admin/terms`). Prisma Studio n’est plus nécessaire pour ajouter ou modifier des termes en local.
 
 Le seed des termes peut être relancé sans créer de doublons. Il ne modifie pas un terme déjà présent (label, description, `imagePath`) et n’écrase jamais un alias créé à la main. Un conflit (alias déjà code ou alias d’un autre terme) est signalé dans la console et l’alias n’est pas créé. Le seed n’est pas exécuté automatiquement au démarrage Docker.
 
@@ -161,15 +166,28 @@ Variantes d’écriture qui pointent vers une seule fiche.
 
 Relation : un `CrochetTerm` possède plusieurs `CrochetTermAlias` (1-N). Le `code` du terme est aussi une expression reconnue, sans le dupliquer en alias.
 
+L’unicité SQL porte séparément sur `CrochetTerm.code` et `CrochetTermAlias.aliasNormalized`. **Il n’existe pas de contrainte SQL transversale** entre un code et un alias d’un autre terme : les collisions `code ↔ alias` sont contrôlées dans `lib/terms.ts` (dans une transaction). Une course rare entre deux écritures simultanées n’est donc pas garantie par la base.
+
 Seed initial (8 termes, `imagePath` toujours `null`) : `ml`, `mc`, `ms`, `db`, `br`, `dbr`, `aug`, `dim`.
 
 ## Routes API
 
-| Méthode | Route                 | Description                               |
-|---------|-----------------------|-------------------------------------------|
-| `POST`  | `/api/tutorials`      | Crée un tuto + ses étapes                 |
-| `GET`   | `/api/tutorials/[id]` | Récupère un tuto avec ses étapes triées   |
-| `GET`   | `/api/tutorials`      | Liste tous les tutos (debug)              |
+| Méthode | Route                                  | Description                               |
+|---------|----------------------------------------|-------------------------------------------|
+| `POST`  | `/api/tutorials`                       | Crée un tuto + ses étapes                 |
+| `GET`   | `/api/tutorials/[id]`                  | Récupère un tuto avec ses étapes triées   |
+| `GET`   | `/api/tutorials`                       | Liste tous les tutos (debug)              |
+| `GET`   | `/api/terms`                           | Liste les termes (tri par code)           |
+| `POST`  | `/api/terms`                           | Crée un terme et ses alias initiaux       |
+| `GET`   | `/api/terms/[id]`                      | Détail d’un terme                         |
+| `PATCH` | `/api/terms/[id]`                      | Met à jour code, label, description, image |
+| `DELETE`| `/api/terms/[id]`                      | Supprime un terme et ses alias            |
+| `POST`  | `/api/terms/[id]/aliases`              | Ajoute un alias                           |
+| `DELETE`| `/api/terms/[id]/aliases/[aliasId]`    | Supprime un alias                         |
+
+Statuts des routes `/api/terms` : `400` données invalides, `404` identifiant introuvable, `409` collision code/alias, `500` erreur inattendue.
+
+Les routes `/api/terms*` sont ouvertes (pas d’authentification). Ne pas les exposer publiquement sans protection.
 
 ### Exemple
 
@@ -189,6 +207,9 @@ Réponse : `{"id":"<uuid>"}`
 | `/tutorials`                 | Catalogue de tous les tutos      |
 | `/tutorials/[id]`            | Liste des étapes d'un tuto       |
 | `/tutorials/[id]/play?step=` | Lecture pas à pas, avec aides sur les termes |
+| `/admin/terms`               | Liste des termes (tri alphabétique par code) |
+| `/admin/terms/new`           | Créer un terme                               |
+| `/admin/terms/[id]`          | Modifier ou supprimer un terme               |
 
 ## Aides dans le lecteur
 
@@ -211,18 +232,23 @@ L’interrupteur **Afficher les aides** (case à cocher) est activé par défaut
 crochet-translator/
 ├── app/                      # Pages et API routes (App Router)
 │   ├── api/tutorials/        # POST + GET liste
+│   ├── api/terms/            # CRUD termes et alias
+│   ├── admin/terms/          # Administration locale des termes
 │   ├── tutorials/[id]/       # Liste + lecteur play
 │   └── page.tsx              # Accueil (formulaire)
 ├── components/               # Composants React réutilisables
 │   ├── TutorialPlayer.tsx    # Lecteur + toggle des aides
 │   ├── StepTermText.tsx      # Texte d'étape avec termes cliquables
-│   └── TermHelpModal.tsx     # Fiche d'aide (<dialog> natif)
+│   ├── TermHelpModal.tsx     # Fiche d'aide (<dialog> natif)
+│   └── admin/                # Formulaires et dialog de suppression
 ├── lib/
 │   ├── db/prisma.ts          # Client Prisma singleton
 │   ├── tutorials.ts          # Logique métier
-│   ├── terms.ts              # Chargement serveur des termes
+│   ├── terms.ts              # Chargement + CRUD serveur des termes
+│   ├── term-types.ts         # Types partagés admin / API
 │   ├── crochet-terms.ts      # Normalisation + segmentation
-│   └── crochet-terms.test.ts # Tests du matcher
+│   ├── crochet-terms.test.ts # Tests du matcher
+│   └── terms.test.ts         # Tests validation et collisions
 ├── prisma/
 │   ├── schema.prisma         # Schéma de données
 │   ├── seed.ts               # Seed idempotent des termes FR

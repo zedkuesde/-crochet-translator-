@@ -15,6 +15,9 @@ export default function HomePage() {
       </header>
 
       <SecondaryButtonLink href="/tutorials">Voir mes tutos</SecondaryButtonLink>
+      <SecondaryButtonLink href="/admin/terms">
+        Administrer les termes
+      </SecondaryButtonLink>
 
       <CreateTutorialForm />
     </PageShell>
