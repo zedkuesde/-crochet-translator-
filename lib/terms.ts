@@ -306,7 +306,7 @@ function wrapUniqueConflict(error: unknown, field: TermField): never {
   throw error;
 }
 
-async function loadNamespace(
+export async function loadCollisionNamespace(
   tx: Prisma.TransactionClient,
 ): Promise<NamespaceEntry[]> {
   const [terms, aliases] = await Promise.all([
@@ -346,7 +346,7 @@ async function assertExpressionAvailable(
   role: "code" | "alias",
   ignore?: CollisionIgnore & { currentTermId?: string },
 ): Promise<void> {
-  const collision = findCollision(normalized, await loadNamespace(tx), ignore);
+  const collision = findCollision(normalized, await loadCollisionNamespace(tx), ignore);
   if (!collision) {
     return;
   }

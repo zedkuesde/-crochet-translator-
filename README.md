@@ -29,7 +29,7 @@ Pas d'authentification : chaque tuto est identifié par un UUID accessible via l
 - Navigation cohérente entre accueil, catalogue, détail et lecteur
 - Lecteur pas à pas : codes et alias reconnus, fiches d'aide, interrupteur **Afficher les aides**
 - Lecteur pas à pas : encadré **Explication débutant** (notation simple, sans réécrire le patron)
-- Administration locale des termes (`/admin/terms`) : liste, création, édition, alias, suppression — sans Prisma Studio
+- Administration locale des termes (`/admin/terms`) : liste, création, édition, alias, suppression, import JSON avec aperçu — sans Prisma Studio
 
 ## Développement local
 
@@ -65,13 +65,15 @@ Le fichier `db.sqlite` est ignoré par Git.
 npm run db:migrate   # prisma migrate dev
 npm run db:deploy    # prisma migrate deploy (prod / Docker)
 npm run db:seed      # seed idempotent des termes de crochet
-npm test             # matching des termes + explication débutant (node:test)
+npm test             # matching, collisions, explication débutant, import JSON (node:test)
 npx prisma studio    # interface visuelle de la DB (optionnel)
 ```
 
-L’enrichissement du catalogue de termes se fait dans l’application via **Administrer les termes** (`/admin/terms`). Prisma Studio n’est plus nécessaire pour ajouter ou modifier des termes en local.
+L’enrichissement du catalogue de termes se fait dans l’application via **Administrer les termes** (`/admin/terms`) ou **Importer un fichier JSON** (`/admin/terms/import`). Prisma Studio n’est plus nécessaire pour ajouter ou modifier des termes en local.
 
 Le seed des termes peut être relancé sans créer de doublons. Il ne modifie pas un terme déjà présent (label, description, `imagePath`) et n’écrase jamais un alias créé à la main. Un conflit (alias déjà code ou alias d’un autre terme) est signalé dans la console et l’alias n’est pas créé. Le seed n’est pas exécuté automatiquement au démarrage Docker.
+
+L’import JSON est **additif et tout ou rien** : preview obligatoire, confirmation explicite, pas d’écrasement des fiches existantes, pas d’import partiel en cas de conflit. Le fichier choisi est lu dans le navigateur et copié dans la zone de texte ; seul ce texte est envoyé à l’API. Rien n’est stocké sur disque.
 
 ## Docker
 
@@ -185,8 +187,12 @@ Seed initial (8 termes, `imagePath` toujours `null`) : `ml`, `mc`, `ms`, `db`, `
 | `DELETE`| `/api/terms/[id]`                      | Supprime un terme et ses alias            |
 | `POST`  | `/api/terms/[id]/aliases`              | Ajoute un alias                           |
 | `DELETE`| `/api/terms/[id]/aliases/[aliasId]`    | Supprime un alias                         |
+| `POST`  | `/api/terms/import/preview`            | Valide un JSON V1 et calcule l’aperçu     |
+| `POST`  | `/api/terms/import/commit`             | Importe après confirmation (tout ou rien) |
 
 Statuts des routes `/api/terms` : `400` données invalides, `404` identifiant introuvable, `409` collision code/alias, `500` erreur inattendue.
+
+Statuts import : `400` JSON/schéma/hashes invalides (`invalid_json`, `invalid_document`, `payload_changed`), `409` catalogue changé ou conflits (`catalog_changed`, `conflicts`), `500` erreur inattendue. Preview avec conflits métier : `200` et `canCommit: false`.
 
 Les routes `/api/terms*` sont ouvertes (pas d’authentification). Ne pas les exposer publiquement sans protection.
 
@@ -210,6 +216,7 @@ Réponse : `{"id":"<uuid>"}`
 | `/tutorials/[id]/play?step=` | Lecture pas à pas, aides termes + explication débutant |
 | `/admin/terms`               | Liste des termes (tri alphabétique par code) |
 | `/admin/terms/new`           | Créer un terme                               |
+| `/admin/terms/import`        | Importer un JSON (preview + confirmation)    |
 | `/admin/terms/[id]`          | Modifier ou supprimer un terme               |
 
 ## Aides dans le lecteur
@@ -247,14 +254,55 @@ Non expliqué automatiquement : termes sans quantité, blocs sans `xN`, parenth�
 7. Vérifier les deux cases **Afficher les aides** et **Explication débutant** au clavier (Tab, Espace). L’encadré pédagogique reste lisible sans survol ; le texte du patron ne change jamais. Sur une ligne avec qualificatif (`dans chaque maille`), la note de prudence apparaît ; sur une ligne jalon D sans qualificatif, elle n’apparaît pas.
 8. Désactiver les aides cliquables : l’explication débutant reste visible. Désactiver l’explication : les termes cliquables restent. Recharger la page : les deux préférences sont conservées.
 
+## Import JSON des termes
+
+Page : `/admin/terms/import`. Format V1 obligatoire :
+
+```json
+{
+  "format": "crochet-translator-terms",
+  "version": 1,
+  "terms": [
+    {
+      "code": "cm",
+      "label": "Cercle magique",
+      "description": "Boucle ajustable pour démarrer un ouvrage en rond.",
+      "imagePath": null,
+      "aliases": ["cercle magique", "anneau magique"]
+    }
+  ]
+}
+```
+
+Politique : additif, idempotent, sans écrasement. Si un `code` existe déjà, label / description / `imagePath` restent intacts ; seuls les alias nouveaux disponibles peuvent être ajoutés. Un conflit (code déjà alias, alias déjà code ou déjà lié à un autre terme) bloque tout l’import. Pas d’option d’écrasement ni d’import partiel.
+
+Le commit renvoie le même `jsonText` que l’aperçu, plus `payloadHash` et `catalogFingerprint` (SHA-256). Le serveur recalcule les deux dans une transaction Prisma avant toute écriture. Si le JSON ou le dictionnaire a changé, l’import est refusé.
+
+Limites validées côté serveur : JSON brut 1 Mo ; 500 termes ; 50 alias par terme ; `code` 64 caractères ; `label` / alias 120 ; `description` 2000 ; `imagePath` 255. Les champs inconnus sont rejetés. `imagePath` n’est pas vérifié sur le disque.
+
+Les tests automatisés couvrent le parseur, les limites, le plan (idempotence, collisions, hashes). Ils ne lancent pas Prisma : pas de base temporaire dans `npm test`. Vérifier manuellement le commit, le re-import, un conflit, un catalogue modifié entre preview et commit, et qu’une erreur n’écrit rien.
+
+### Recette manuelle d’import
+
+1. Ouvrir `/admin/terms`, cliquer **Importer un fichier JSON**.
+2. Choisir un fichier `.json` : le contenu apparaît dans la zone de texte, qui reste éditable ; statut `Contenu chargé depuis : …`.
+3. Modifier le textarea, relancer **Vérifier et prévisualiser**.
+4. Coller un JSON sans fichier : même validation.
+5. Cas d’erreur (mauvais `format`, alias vide) : zone `role="alert"`, pas de bouton d’import.
+6. Preview sans conflit avec des créations : **Confirmer l’import**, dialog (Annuler, Échap, clic backdrop, focus).
+7. Après succès : message `role="status"` et lien vers `/admin/terms`.
+8. Re-importer le même fichier : termes inchangés, alias déjà présents, rien à écrire.
+9. JSON en conflit (code déjà alias, alias déjà code) : bouton d’import absent, JSON conservé.
+10. Preview, puis modifier un terme dans l’admin, puis confirmer l’ancien aperçu : l’API refuse (`catalog_changed`) ; relancer la prévisualisation.
+
 ## Structure du projet
 
 ```
 crochet-translator/
 ├── app/                      # Pages et API routes (App Router)
 │   ├── api/tutorials/        # POST + GET liste
-│   ├── api/terms/            # CRUD termes et alias
-│   ├── admin/terms/          # Administration locale des termes
+│   ├── api/terms/            # CRUD termes, alias, import JSON
+│   ├── admin/terms/          # Administration locale des termes + import
 │   ├── tutorials/[id]/       # Liste + lecteur play
 │   └── page.tsx              # Accueil (formulaire)
 ├── components/               # Composants React réutilisables
@@ -262,12 +310,15 @@ crochet-translator/
 │   ├── StepTermText.tsx      # Texte d'étape avec termes cliquables
 │   ├── BeginnerExplanationPanel.tsx # Encadré explication débutant
 │   ├── TermHelpModal.tsx     # Fiche d'aide (<dialog> natif)
-│   └── admin/                # Formulaires et dialog de suppression
+│   └── admin/                # Formulaires, import JSON, dialogs
 ├── lib/
 │   ├── db/prisma.ts          # Client Prisma singleton
 │   ├── tutorials.ts          # Logique métier
 │   ├── terms.ts              # Chargement + CRUD serveur des termes
 │   ├── term-types.ts         # Types partagés admin / API
+│   ├── terms-import.ts       # Parse V1, plan, preview, commit
+│   ├── terms-import-constants.ts # Limites et format JSON
+│   ├── terms-import.test.ts  # Tests parse / plan / hashes
 │   ├── crochet-terms.ts      # Normalisation + segmentation
 │   ├── crochet-terms.test.ts # Tests du matcher
 │   ├── beginner-explanation.ts      # Parseur pédagogique déterministe

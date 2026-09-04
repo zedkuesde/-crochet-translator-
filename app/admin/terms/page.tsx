@@ -5,6 +5,7 @@ import {
   BackLink,
   PageShell,
   PrimaryButtonLink,
+  SecondaryButtonLink,
 } from "@/components/PageShell";
 import { listTermsForAdmin } from "@/lib/terms";
 
@@ -64,6 +65,9 @@ export default async function TermsAdminPage({
       <PrimaryButtonLink href="/admin/terms/new">
         Ajouter un terme
       </PrimaryButtonLink>
+      <SecondaryButtonLink href="/admin/terms/import">
+        Importer un fichier JSON
+      </SecondaryButtonLink>
 
       {terms.length === 0 ? (
         <p className="text-stone-600">
