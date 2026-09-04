@@ -3,10 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { BeginnerExplanationPanel } from "@/components/BeginnerExplanationPanel";
 import { StepTermText } from "@/components/StepTermText";
+import { parseBeginnerExplanation } from "@/lib/beginner-explanation";
 import type { CrochetTermWithAliases } from "@/lib/crochet-terms";
 
 const SHOW_TERM_HELPS_KEY = "crochet-translator:show-term-helps";
+const SHOW_BEGINNER_EXPLANATIONS_KEY =
+  "crochet-translator:show-beginner-explanations";
 
 export type PlayerStep = {
   id: string;
@@ -36,15 +40,28 @@ export function TutorialPlayer({
   const stepLabel = step?.label ?? "Aucune étape";
 
   const [showHelps, setShowHelps] = useState(true);
+  const [showBeginnerExplanations, setShowBeginnerExplanations] =
+    useState(true);
   const [storageReady, setStorageReady] = useState(false);
+  const beginnerExplanation = parseBeginnerExplanation(stepLabel, terms);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(SHOW_TERM_HELPS_KEY);
-    if (stored === "false") {
+    const storedHelps = window.localStorage.getItem(SHOW_TERM_HELPS_KEY);
+    if (storedHelps === "false") {
       setShowHelps(false);
-    } else if (stored === "true") {
+    } else if (storedHelps === "true") {
       setShowHelps(true);
     }
+
+    const storedBeginner = window.localStorage.getItem(
+      SHOW_BEGINNER_EXPLANATIONS_KEY,
+    );
+    if (storedBeginner === "false") {
+      setShowBeginnerExplanations(false);
+    } else if (storedBeginner === "true") {
+      setShowBeginnerExplanations(true);
+    }
+
     setStorageReady(true);
   }, []);
 
@@ -57,6 +74,16 @@ export function TutorialPlayer({
       showHelps ? "true" : "false",
     );
   }, [showHelps, storageReady]);
+
+  useEffect(() => {
+    if (!storageReady) {
+      return;
+    }
+    window.localStorage.setItem(
+      SHOW_BEGINNER_EXPLANATIONS_KEY,
+      showBeginnerExplanations ? "true" : "false",
+    );
+  }, [showBeginnerExplanations, storageReady]);
 
   return (
     <div className="flex w-full flex-col gap-8">
@@ -75,15 +102,28 @@ export function TutorialPlayer({
         </div>
       </div>
 
-      <label className="flex min-h-11 cursor-pointer items-center gap-3 self-start text-base font-medium text-stone-800">
-        <input
-          type="checkbox"
-          className="size-5 shrink-0 rounded border-stone-300 text-rose-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
-          checked={showHelps}
-          onChange={(event) => setShowHelps(event.target.checked)}
-        />
-        Afficher les aides
-      </label>
+      <div className="flex flex-col gap-2 self-start">
+        <label className="flex min-h-11 cursor-pointer items-center gap-3 text-base font-medium text-stone-800">
+          <input
+            type="checkbox"
+            className="size-5 shrink-0 rounded border-stone-300 text-rose-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
+            checked={showHelps}
+            onChange={(event) => setShowHelps(event.target.checked)}
+          />
+          Afficher les aides
+        </label>
+        <label className="flex min-h-11 cursor-pointer items-center gap-3 text-base font-medium text-stone-800">
+          <input
+            type="checkbox"
+            className="size-5 shrink-0 rounded border-stone-300 text-rose-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
+            checked={showBeginnerExplanations}
+            onChange={(event) =>
+              setShowBeginnerExplanations(event.target.checked)
+            }
+          />
+          Explication débutant
+        </label>
+      </div>
 
       <section className="flex min-h-[220px] items-center justify-center rounded-2xl border border-stone-200 bg-white px-6 py-10 shadow-sm">
         {showHelps ? (
@@ -94,6 +134,10 @@ export function TutorialPlayer({
           </p>
         )}
       </section>
+
+      {showBeginnerExplanations ? (
+        <BeginnerExplanationPanel explanation={beginnerExplanation} />
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3">
         {isFirst ? (

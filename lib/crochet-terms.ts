@@ -33,6 +33,14 @@ export type TermSegment = {
 
 export type StepSegment = TextSegment | TermSegment;
 
+export type TermMatch = {
+  end: number;
+  value: string;
+  term: CrochetTermHelp;
+};
+
+export type TermMatcher = (text: string, start: number) => TermMatch | null;
+
 type MatchableExpression = {
   normalized: string;
   term: CrochetTermHelp;
@@ -156,6 +164,35 @@ function tryMatchAt(
   return index;
 }
 
+/**
+ * Construit un matcher de termes (`code` + `aliases` uniquement).
+ * Même règles que `segmentStepText` : plus long d’abord, frontières lettres Unicode.
+ */
+export function createTermMatcher(
+  terms: CrochetTermWithAliases[],
+): TermMatcher {
+  const expressions = buildMatchableExpressions(terms);
+
+  return (text, start) => {
+    if (!isLeftBoundary(text, start)) {
+      return null;
+    }
+
+    for (const expression of expressions) {
+      const end = tryMatchAt(text, start, expression.normalized);
+      if (end !== null && isRightBoundary(text, end)) {
+        return {
+          end,
+          value: text.slice(start, end),
+          term: expression.term,
+        };
+      }
+    }
+
+    return null;
+  };
+}
+
 export function segmentStepText(
   text: string,
   terms: CrochetTermWithAliases[],
@@ -164,7 +201,7 @@ export function segmentStepText(
     return [{ type: "text", value: "" }];
   }
 
-  const expressions = buildMatchableExpressions(terms);
+  const matchAt = createTermMatcher(terms);
   const segments: StepSegment[] = [];
   let index = 0;
   let textBuffer = "";
@@ -178,32 +215,17 @@ export function segmentStepText(
   };
 
   while (index < text.length) {
-    if (isLeftBoundary(text, index)) {
-      let matched: { end: number; value: string; term: CrochetTermHelp } | null =
-        null;
+    const matched = matchAt(text, index);
 
-      for (const expression of expressions) {
-        const end = tryMatchAt(text, index, expression.normalized);
-        if (end !== null && isRightBoundary(text, end)) {
-          matched = {
-            end,
-            value: text.slice(index, end),
-            term: expression.term,
-          };
-          break;
-        }
-      }
-
-      if (matched) {
-        flushText();
-        segments.push({
-          type: "term",
-          value: matched.value,
-          term: matched.term,
-        });
-        index = matched.end;
-        continue;
-      }
+    if (matched) {
+      flushText();
+      segments.push({
+        type: "term",
+        value: matched.value,
+        term: matched.term,
+      });
+      index = matched.end;
+      continue;
     }
 
     textBuffer += text[index] ?? "";

@@ -28,6 +28,7 @@ Pas d'authentification : chaque tuto est identifié par un UUID accessible via l
 - Gestion de l'état vide
 - Navigation cohérente entre accueil, catalogue, détail et lecteur
 - Lecteur pas à pas : codes et alias reconnus, fiches d'aide, interrupteur **Afficher les aides**
+- Lecteur pas à pas : encadré **Explication débutant** (notation simple, sans réécrire le patron)
 - Administration locale des termes (`/admin/terms`) : liste, création, édition, alias, suppression — sans Prisma Studio
 
 ## Développement local
@@ -64,7 +65,7 @@ Le fichier `db.sqlite` est ignoré par Git.
 npm run db:migrate   # prisma migrate dev
 npm run db:deploy    # prisma migrate deploy (prod / Docker)
 npm run db:seed      # seed idempotent des termes de crochet
-npm test             # matching des termes (node:test)
+npm test             # matching des termes + explication débutant (node:test)
 npx prisma studio    # interface visuelle de la DB (optionnel)
 ```
 
@@ -206,7 +207,7 @@ Réponse : `{"id":"<uuid>"}`
 | `/`                          | Créer un tuto                    |
 | `/tutorials`                 | Catalogue de tous les tutos      |
 | `/tutorials/[id]`            | Liste des étapes d'un tuto       |
-| `/tutorials/[id]/play?step=` | Lecture pas à pas, avec aides sur les termes |
+| `/tutorials/[id]/play?step=` | Lecture pas à pas, aides termes + explication débutant |
 | `/admin/terms`               | Liste des termes (tri alphabétique par code) |
 | `/admin/terms/new`           | Créer un terme                               |
 | `/admin/terms/[id]`          | Modifier ou supprimer un terme               |
@@ -217,6 +218,17 @@ Dans `/tutorials/[id]/play`, les **codes** et **alias** du catalogue (`ms`, `m.s
 
 L’interrupteur **Afficher les aides** (case à cocher) est activé par défaut. Désactivé, le texte d’étape redevient du texte brut. Le réglage est conservé dans `localStorage` (`crochet-translator:show-term-helps`). Les fiches fonctionnent sans image (`imagePath` actuellement `null`).
 
+Sous le patron original (jamais modifié), l’encadré **Explication débutant** reformule en français les formes **sûres** reconnues :
+
+- quantité + terme connu (`1ms`, `2 ms`, `1 diminution`) ;
+- bloc encadré `*…*`, `[…]` ou `(…)` **immédiatement** suivi de `xN` / `×N` ;
+- total final `(N)` en fin d’instruction, présenté comme une indication du patron ;
+- préfixe simple `R3 :`, `Rang 3 :`, `Tour 2 :`, `T3 :`.
+
+Formulation des actions : `Fais 2 × Maille serrée.` (quantité lisible, **label exact** de la base, sans pluralisation). Si le format n’est pas reconnu, l’encadré affiche une note discrète et ne propose **aucune** interprétation. Les deux interrupteurs sont indépendants : l’explication continue si les aides cliquables sont désactivées. L’interrupteur **Explication débutant** est activé par défaut ; réglage dans `localStorage` (`crochet-translator:show-beginner-explanations`).
+
+Non expliqué automatiquement : termes sans quantité, blocs sans `xN`, parenthèses isolées `(18)`, imbrications, phrases libres, anglais, fuzzy matching.
+
 ### Recette manuelle d’accessibilité
 
 1. Ouvrir une fiche à la souris/tap, puis au clavier (Tab jusqu’au terme, Entrée).
@@ -225,6 +237,8 @@ L’interrupteur **Afficher les aides** (case à cocher) est activé par défaut
 4. Après chaque fermeture, vérifier que le focus revient exactement sur le terme qui a ouvert la fiche.
 5. Refaire ce parcours sur Safari ou un navigateur mobile si disponible.
 6. Si le `<dialog>` natif ne fournit pas ce comportement sur un navigateur cible : ne pas ajouter de bibliothèque ; noter le constat et corriger au minimum.
+7. Vérifier les deux cases **Afficher les aides** et **Explication débutant** au clavier (Tab, Espace). L’encadré pédagogique reste lisible sans survol ; le texte du patron ne change jamais.
+8. Désactiver les aides cliquables : l’explication débutant reste visible. Désactiver l’explication : les termes cliquables restent. Recharger la page : les deux préférences sont conservées.
 
 ## Structure du projet
 
@@ -237,8 +251,9 @@ crochet-translator/
 │   ├── tutorials/[id]/       # Liste + lecteur play
 │   └── page.tsx              # Accueil (formulaire)
 ├── components/               # Composants React réutilisables
-│   ├── TutorialPlayer.tsx    # Lecteur + toggle des aides
+│   ├── TutorialPlayer.tsx    # Lecteur + toggles aides / explication
 │   ├── StepTermText.tsx      # Texte d'étape avec termes cliquables
+│   ├── BeginnerExplanationPanel.tsx # Encadré explication débutant
 │   ├── TermHelpModal.tsx     # Fiche d'aide (<dialog> natif)
 │   └── admin/                # Formulaires et dialog de suppression
 ├── lib/
@@ -248,6 +263,8 @@ crochet-translator/
 │   ├── term-types.ts         # Types partagés admin / API
 │   ├── crochet-terms.ts      # Normalisation + segmentation
 │   ├── crochet-terms.test.ts # Tests du matcher
+│   ├── beginner-explanation.ts      # Parseur pédagogique déterministe
+│   ├── beginner-explanation.test.ts # Tests du parseur débutant
 │   └── terms.test.ts         # Tests validation et collisions
 ├── prisma/
 │   ├── schema.prisma         # Schéma de données
