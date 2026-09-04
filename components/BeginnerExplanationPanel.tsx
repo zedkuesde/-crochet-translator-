@@ -34,7 +34,9 @@ export function BeginnerExplanationPanel({
 
   const copy = toBeginnerExplanationCopy(explanation);
   const useNumberedList =
-    explanation.repeatCount !== undefined || copy.actionLines.length > 1;
+    explanation.repeatCount !== undefined ||
+    explanation.repeatUntilEnd !== undefined ||
+    copy.actionLines.length > 1;
 
   return (
     <section
@@ -61,6 +63,12 @@ export function BeginnerExplanationPanel({
         ) : (
           <p>{copy.actionLines[0]}</p>
         )}
+
+        {copy.positionCautionNote ? (
+          <p className="text-sm leading-relaxed text-stone-600">
+            {copy.positionCautionNote}
+          </p>
+        ) : null}
 
         {copy.expectedStitchCountLine ? (
           <p>{copy.expectedStitchCountLine}</p>

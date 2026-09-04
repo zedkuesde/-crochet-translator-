@@ -10,9 +10,12 @@ export type ExplainedTerm = {
   label: string;
 };
 
+export type ActionQualifier = "each-stitch" | "next-stitch";
+
 export type ExplainedAction = {
   quantity: number;
   term: ExplainedTerm;
+  qualifier?: ActionQualifier;
 };
 
 export type RowKind = "rang" | "tour";
@@ -22,6 +25,7 @@ export type BeginnerExplanation =
       kind: "explained";
       row?: { kind: RowKind; number: number };
       repeatCount?: number;
+      repeatUntilEnd?: RowKind;
       steps: ExplainedAction[];
       expectedStitchCount?: number;
     }
@@ -39,11 +43,15 @@ export type BeginnerExplanationCopy = {
   rowIntro?: string;
   repeatIntro?: string;
   actionLines: string[];
+  positionCautionNote?: string;
   expectedStitchCountLine?: string;
 };
 
 export const UNSUPPORTED_EXPLANATION_NOTE =
   "Cette instruction est conservée telle quelle : son format n’est pas encore expliqué automatiquement.";
+
+export const POSITION_QUALIFIER_NOTE =
+  "Note : l’application reformule l’instruction ; elle ne calcule pas le nombre de mailles ni la position exacte où piquer.";
 
 const WHITESPACE = /\s/u;
 const NESTED_DELIMITER = /[*[\]()]/u;
@@ -53,6 +61,19 @@ const ROW_PREFIX_RE =
 const TRAILING_COUNT_RE = /\(\s*([1-9]\d{0,3})\s*\)\s*$/u;
 const MULTIPLIER_RE = /^\s*[x×]\s*([1-9]\d{0,2})\s*$/iu;
 const QUANTITY_RE = /^([1-9]\d{0,2})/u;
+const UNTIL_END_RE = /\s+jusqu['’]à\s+la\s+fin\s+du\s+(rang|tour)\s*$/iu;
+const REPEAT_PHRASE_RE = /,\s*à\s+répéter\s+([1-9]\d{0,2})\s+fois\s*$/iu;
+const RESIDUAL_MULTIPLIER_RE = /[x×]\s*[1-9]\d{0,2}/u;
+
+const QUALIFIER_PHRASES: ReadonlyArray<{
+  folded: string;
+  qualifier: ActionQualifier;
+}> = [
+  { folded: "dans chaque maille", qualifier: "each-stitch" },
+  { folded: "dans toutes les mailles", qualifier: "each-stitch" },
+  { folded: "dans la maille suivante", qualifier: "next-stitch" },
+  { folded: "dans la prochaine maille", qualifier: "next-stitch" },
+];
 
 type ParseFailure = {
   ok: false;
@@ -69,6 +90,14 @@ type ActionSequenceResult =
 type RepeatBlockResult =
   | { kind: "ok"; steps: ExplainedAction[]; repeatCount: number }
   | { kind: "error"; reason: ParseFailure["reason"] };
+
+function foldPhrase(value: string): string {
+  return value
+    .normalize("NFC")
+    .toLocaleLowerCase("fr")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
 
 function parseRowPrefix(text: string): {
   row: { kind: RowKind; number: number };
@@ -118,6 +147,61 @@ function splitTrailingCount(text: string):
   };
 }
 
+function splitUntilEndSuffix(body: string): {
+  rest: string;
+  repeatUntilEnd?: RowKind;
+} {
+  const normalized = body.normalize("NFC");
+  const match = UNTIL_END_RE.exec(normalized);
+  if (!match || match.index === undefined) {
+    return { rest: body };
+  }
+
+  const target = (match[1] ?? "").toLocaleLowerCase("fr");
+  if (target !== "rang" && target !== "tour") {
+    return { rest: body };
+  }
+
+  return {
+    rest: normalized.slice(0, match.index).trimEnd(),
+    repeatUntilEnd: target,
+  };
+}
+
+function splitRepeatPhraseSuffix(body: string): {
+  rest: string;
+  repeatCount?: number;
+} {
+  const normalized = body.normalize("NFC");
+  const match = REPEAT_PHRASE_RE.exec(normalized);
+  if (!match || match.index === undefined) {
+    return { rest: body };
+  }
+
+  return {
+    rest: normalized.slice(0, match.index).trimEnd(),
+    repeatCount: Number.parseInt(match[1] ?? "", 10),
+  };
+}
+
+function hasResidualRepeatSyntax(text: string): boolean {
+  return NESTED_DELIMITER.test(text) || RESIDUAL_MULTIPLIER_RE.test(text);
+}
+
+function parseActionQualifier(rest: string): ActionQualifier | null {
+  const folded = foldPhrase(rest);
+  for (const phrase of QUALIFIER_PHRASES) {
+    if (folded === phrase.folded) {
+      return phrase.qualifier;
+    }
+  }
+  return null;
+}
+
+function hasPositionQualifier(steps: ExplainedAction[]): boolean {
+  return steps.some((step) => step.qualifier !== undefined);
+}
+
 function parseAction(
   fragment: string,
   matchAt: TermMatcher,
@@ -146,11 +230,7 @@ function parseAction(
     return "unknown-term";
   }
 
-  if (matched.end !== trimmed.length) {
-    return "leftover";
-  }
-
-  return {
+  const action: ExplainedAction = {
     quantity: Number.parseInt(quantityMatch[1] ?? "", 10),
     term: {
       id: matched.term.id,
@@ -158,6 +238,23 @@ function parseAction(
       label: matched.term.label,
     },
   };
+
+  if (matched.end === trimmed.length) {
+    return action;
+  }
+
+  const afterTerm = trimmed.slice(matched.end);
+  if (!WHITESPACE.test(afterTerm[0] ?? "")) {
+    return "leftover";
+  }
+
+  const qualifier = parseActionQualifier(afterTerm);
+  if (!qualifier) {
+    return "leftover";
+  }
+
+  action.qualifier = qualifier;
+  return action;
 }
 
 function parseActionSequence(
@@ -236,11 +333,22 @@ function tryParseRepeatBlock(
     return { kind: "error", reason: sequence.reason };
   }
 
+  if (hasPositionQualifier(sequence.steps)) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
   return {
     kind: "ok",
     steps: sequence.steps,
     repeatCount: Number.parseInt(multiplier[1] ?? "", 10),
   };
+}
+
+function formatQualifierSuffix(qualifier: ActionQualifier): string {
+  if (qualifier === "each-stitch") {
+    return " dans chaque maille";
+  }
+  return " dans la maille suivante";
 }
 
 export function parseBeginnerExplanation(
@@ -266,7 +374,92 @@ export function parseBeginnerExplanation(
     return { kind: "unsupported", reason: "no-supported-pattern" };
   }
 
-  const repeat = tryParseRepeatBlock(body, matchAt);
+  const untilEndSplit = splitUntilEndSuffix(body);
+  let remaining = untilEndSplit.rest.trim();
+  const repeatUntilEnd = untilEndSplit.repeatUntilEnd;
+
+  if (remaining.length === 0) {
+    return { kind: "unsupported", reason: "no-supported-pattern" };
+  }
+
+  let phraseRepeatCount: number | undefined;
+  if (!repeatUntilEnd) {
+    const phraseSplit = splitRepeatPhraseSuffix(remaining);
+    if (phraseSplit.repeatCount !== undefined) {
+      remaining = phraseSplit.rest.trim();
+      phraseRepeatCount = phraseSplit.repeatCount;
+      if (remaining.length === 0) {
+        return { kind: "unsupported", reason: "no-supported-pattern" };
+      }
+    }
+  }
+
+  const repeat = tryParseRepeatBlock(remaining, matchAt);
+
+  if (repeatUntilEnd) {
+    if (repeat !== null) {
+      return { kind: "unsupported", reason: "unsupported-syntax" };
+    }
+
+    const sequence = parseActionSequence(remaining, matchAt);
+    if (!sequence.ok) {
+      return { kind: "unsupported", reason: sequence.reason };
+    }
+
+    if (sequence.steps.length < 2) {
+      return { kind: "unsupported", reason: "unsupported-syntax" };
+    }
+
+    if (prefix && prefix.row.kind !== repeatUntilEnd) {
+      return { kind: "unsupported", reason: "unsupported-syntax" };
+    }
+
+    const explanation: Extract<BeginnerExplanation, { kind: "explained" }> = {
+      kind: "explained",
+      steps: sequence.steps,
+      repeatUntilEnd,
+    };
+
+    if (prefix) {
+      explanation.row = prefix.row;
+    }
+    if (countSplit.expectedStitchCount !== undefined) {
+      explanation.expectedStitchCount = countSplit.expectedStitchCount;
+    }
+
+    return explanation;
+  }
+
+  if (phraseRepeatCount !== undefined) {
+    if (repeat !== null || hasResidualRepeatSyntax(remaining)) {
+      return { kind: "unsupported", reason: "unsupported-syntax" };
+    }
+
+    const sequence = parseActionSequence(remaining, matchAt);
+    if (!sequence.ok) {
+      return { kind: "unsupported", reason: sequence.reason };
+    }
+
+    if (sequence.steps.length < 2 || hasPositionQualifier(sequence.steps)) {
+      return { kind: "unsupported", reason: "unsupported-syntax" };
+    }
+
+    const explanation: Extract<BeginnerExplanation, { kind: "explained" }> = {
+      kind: "explained",
+      steps: sequence.steps,
+      repeatCount: phraseRepeatCount,
+    };
+
+    if (prefix) {
+      explanation.row = prefix.row;
+    }
+    if (countSplit.expectedStitchCount !== undefined) {
+      explanation.expectedStitchCount = countSplit.expectedStitchCount;
+    }
+
+    return explanation;
+  }
+
   if (repeat?.kind === "error") {
     return { kind: "unsupported", reason: repeat.reason };
   }
@@ -278,7 +471,7 @@ export function parseBeginnerExplanation(
     steps = repeat.steps;
     repeatCount = repeat.repeatCount;
   } else {
-    const sequence = parseActionSequence(body, matchAt);
+    const sequence = parseActionSequence(remaining, matchAt);
     if (!sequence.ok) {
       return { kind: "unsupported", reason: sequence.reason };
     }
@@ -304,17 +497,22 @@ export function parseBeginnerExplanation(
 }
 
 export function formatActionLine(action: ExplainedAction): string {
-  return `Fais ${action.quantity} × ${action.term.label}.`;
+  const qualifier = action.qualifier
+    ? formatQualifierSuffix(action.qualifier)
+    : "";
+  return `Fais ${action.quantity} × ${action.term.label}${qualifier}.`;
 }
 
 export function formatExpectedStitchCountLine(
   count: number,
   row?: { kind: RowKind; number: number },
+  repeatUntilEnd?: RowKind,
 ): string {
-  if (row?.kind === "rang") {
+  const target = row?.kind ?? repeatUntilEnd;
+  if (target === "rang") {
     return `Le patron indique ${count} mailles à la fin de ce rang.`;
   }
-  if (row?.kind === "tour") {
+  if (target === "tour") {
     return `Le patron indique ${count} mailles à la fin de ce tour.`;
   }
   return `Le patron indique ${count} mailles à la fin de l’instruction.`;
@@ -331,14 +529,21 @@ export function toBeginnerExplanationCopy(
     copy.rowIntro = `Pour le ${explanation.row.kind} ${explanation.row.number} :`;
   }
 
-  if (explanation.repeatCount !== undefined) {
+  if (explanation.repeatUntilEnd) {
+    copy.repeatIntro = `Répète jusqu’à la fin du ${explanation.repeatUntilEnd} :`;
+  } else if (explanation.repeatCount !== undefined) {
     copy.repeatIntro = `Répète ${explanation.repeatCount} fois :`;
+  }
+
+  if (hasPositionQualifier(explanation.steps)) {
+    copy.positionCautionNote = POSITION_QUALIFIER_NOTE;
   }
 
   if (explanation.expectedStitchCount !== undefined) {
     copy.expectedStitchCountLine = formatExpectedStitchCountLine(
       explanation.expectedStitchCount,
       explanation.row,
+      explanation.repeatUntilEnd,
     );
   }
 
