@@ -20,6 +20,16 @@ export type ExplainedAction = {
 
 export type RowKind = "rang" | "tour";
 
+export type RowScope =
+  | { kind: "single"; rowKind: RowKind; number: number }
+  | {
+      kind: "range";
+      rowKind: RowKind;
+      from: number;
+      to: number;
+      declaredCount: number;
+    };
+
 export type ExplanationPart =
   | {
       kind: "actions";
@@ -34,12 +44,18 @@ export type ExplanationPart =
       kind: "repeat-until-end";
       rowKind: RowKind;
       steps: ExplainedAction[];
+    }
+  | {
+      kind: "repeat-across-rows";
+      rowKind: RowKind;
+      declaredCount: number;
+      steps: ExplainedAction[];
     };
 
 export type BeginnerExplanation =
   | {
       kind: "explained";
-      row?: { kind: RowKind; number: number };
+      scope?: RowScope;
       parts: ExplanationPart[];
       expectedStitchCount?: number;
     }
@@ -77,6 +93,8 @@ const NUMERIC_PARENS = /\(\s*[1-9]\d{0,3}\s*\)/u;
 const NUMERIC_BRACKETS = /\[\s*[1-9]\d{0,3}\s*\]/u;
 const ROW_PREFIX_RE =
   /^(?:rang\s+([1-9]\d{0,2})|tour\s+([1-9]\d{0,2})|r([1-9]\d{0,2})|t([1-9]\d{0,2}))\s*:\s*/iu;
+const ROW_RANGE_PREFIX_RE =
+  /^(tours|rangs)\s+([1-9]\d{0,2})\s*[-–]\s*([1-9]\d{0,2})\s*\(\s*([1-9]\d{0,2})\s+(tours|rangs)\s*\)\s*:\s*/iu;
 const TRAILING_COUNT_RE = /\(\s*([1-9]\d{0,3})\s*\)\s*$/u;
 const TRAILING_BRACKET_COUNT_RE = /\[\s*([1-9]\d{0,3})\s*\]\s*$/u;
 const MULTIPLIER_RE = /^\s*[x×]\s*([1-9]\d{0,2})\s*$/iu;
@@ -136,8 +154,19 @@ function foldPhrase(value: string): string {
     .trim();
 }
 
+function rowKindFromPlural(value: string): RowKind | null {
+  const folded = foldPhrase(value);
+  if (folded === "tours") {
+    return "tour";
+  }
+  if (folded === "rangs") {
+    return "rang";
+  }
+  return null;
+}
+
 function parseRowPrefix(text: string): {
-  row: { kind: RowKind; number: number };
+  scope: Extract<RowScope, { kind: "single" }>;
   rest: string;
 } | null {
   const match = ROW_PREFIX_RE.exec(text);
@@ -150,19 +179,66 @@ function parseRowPrefix(text: string): {
 
   if (rangNumber) {
     return {
-      row: { kind: "rang", number: Number.parseInt(rangNumber, 10) },
+      scope: {
+        kind: "single",
+        rowKind: "rang",
+        number: Number.parseInt(rangNumber, 10),
+      },
       rest: text.slice(match[0].length),
     };
   }
 
   if (tourNumber) {
     return {
-      row: { kind: "tour", number: Number.parseInt(tourNumber, 10) },
+      scope: {
+        kind: "single",
+        rowKind: "tour",
+        number: Number.parseInt(tourNumber, 10),
+      },
       rest: text.slice(match[0].length),
     };
   }
 
   return null;
+}
+
+function parseRowRangePrefix(text: string):
+  | {
+      kind: "ok";
+      scope: Extract<RowScope, { kind: "range" }>;
+      rest: string;
+    }
+  | { kind: "error"; reason: ParseFailure["reason"] }
+  | null {
+  const match = ROW_RANGE_PREFIX_RE.exec(text);
+  if (!match) {
+    return null;
+  }
+
+  const prefixKind = rowKindFromPlural(match[1] ?? "");
+  const parenKind = rowKindFromPlural(match[5] ?? "");
+  if (!prefixKind || !parenKind || prefixKind !== parenKind) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  const from = Number.parseInt(match[2] ?? "", 10);
+  const to = Number.parseInt(match[3] ?? "", 10);
+  const declaredCount = Number.parseInt(match[4] ?? "", 10);
+  if (from > to) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  return {
+    kind: "ok",
+    scope: {
+      kind: "range",
+      rowKind: prefixKind,
+      from,
+      to,
+      declaredCount,
+    },
+    rest: text.slice(match[0].length),
+  };
 }
 
 function splitTrailingCount(text: string):
@@ -257,7 +333,7 @@ function allExplainedSteps(parts: ExplanationPart[]): ExplainedAction[] {
 
 function explainedResult(
   parts: ExplanationPart[],
-  prefix: { row: { kind: RowKind; number: number } } | null,
+  scope: RowScope | undefined,
   expectedStitchCount?: number,
 ): Extract<BeginnerExplanation, { kind: "explained" }> {
   const explanation: Extract<BeginnerExplanation, { kind: "explained" }> = {
@@ -265,8 +341,8 @@ function explainedResult(
     parts,
   };
 
-  if (prefix) {
-    explanation.row = prefix.row;
+  if (scope) {
+    explanation.scope = scope;
   }
   if (expectedStitchCount !== undefined) {
     explanation.expectedStitchCount = expectedStitchCount;
@@ -305,6 +381,23 @@ function isMagicRingMisused(
     steps.length !== 1 ||
     extras?.repeatCount !== undefined ||
     extras?.repeatUntilEnd !== undefined
+  );
+}
+
+function hasDisallowedRangeQualifier(steps: ExplainedAction[]): boolean {
+  return steps.some(
+    (step) =>
+      step.qualifier === "next-stitch" || step.qualifier === "magic-ring",
+  );
+}
+
+function hasForbiddenRangeBodySyntax(body: string): boolean {
+  const normalized = body.normalize("NFC");
+  return (
+    UNTIL_END_RE.test(normalized) ||
+    REPEAT_PHRASE_RE.test(normalized) ||
+    hasResidualRepeatSyntax(normalized) ||
+    normalized.includes(";")
   );
 }
 
@@ -585,6 +678,15 @@ export function parseBeginnerExplanation(
   }
 
   const matchAt = createTermMatcher(terms);
+  const rangePrefix = parseRowRangePrefix(trimmed);
+  if (rangePrefix?.kind === "error") {
+    return { kind: "unsupported", reason: rangePrefix.reason };
+  }
+
+  if (rangePrefix?.kind === "ok") {
+    return parseRangeExplanation(rangePrefix.scope, rangePrefix.rest, matchAt);
+  }
+
   const prefix = parseRowPrefix(trimmed);
   const afterPrefix = prefix ? prefix.rest : trimmed;
   const countSplit = splitTrailingCount(afterPrefix);
@@ -638,7 +740,7 @@ export function parseBeginnerExplanation(
       return { kind: "unsupported", reason: "unsupported-syntax" };
     }
 
-    if (prefix && prefix.row.kind !== repeatUntilEnd) {
+    if (prefix && prefix.scope.rowKind !== repeatUntilEnd) {
       return { kind: "unsupported", reason: "unsupported-syntax" };
     }
 
@@ -650,7 +752,7 @@ export function parseBeginnerExplanation(
           steps: sequence.steps,
         },
       ],
-      prefix,
+      prefix?.scope,
       countSplit.expectedStitchCount,
     );
   }
@@ -675,7 +777,7 @@ export function parseBeginnerExplanation(
 
     return explainedResult(
       [{ kind: "repeat", count: phraseRepeatCount, steps: sequence.steps }],
-      prefix,
+      prefix?.scope,
       countSplit.expectedStitchCount,
     );
   }
@@ -691,7 +793,7 @@ export function parseBeginnerExplanation(
 
     return explainedResult(
       [{ kind: "repeat", count: repeat.repeatCount, steps: repeat.steps }],
-      prefix,
+      prefix?.scope,
       countSplit.expectedStitchCount,
     );
   }
@@ -708,7 +810,7 @@ export function parseBeginnerExplanation(
         { kind: "repeat", count: sandwich.count, steps: sandwich.repeated },
         { kind: "actions", steps: sandwich.after },
       ],
-      prefix,
+      prefix?.scope,
       countSplit.expectedStitchCount,
     );
   }
@@ -724,7 +826,50 @@ export function parseBeginnerExplanation(
 
   return explainedResult(
     [{ kind: "actions", steps: sequence.steps }],
-    prefix,
+    prefix?.scope,
+    countSplit.expectedStitchCount,
+  );
+}
+
+function parseRangeExplanation(
+  scope: Extract<RowScope, { kind: "range" }>,
+  afterPrefix: string,
+  matchAt: TermMatcher,
+): BeginnerExplanation {
+  const countSplit = splitTrailingCount(afterPrefix);
+
+  if ("ambiguous" in countSplit) {
+    return { kind: "unsupported", reason: "ambiguous" };
+  }
+
+  const body = countSplit.body.trim();
+  if (body.length === 0) {
+    return { kind: "unsupported", reason: "no-supported-pattern" };
+  }
+
+  if (hasForbiddenRangeBodySyntax(body)) {
+    return { kind: "unsupported", reason: "unsupported-syntax" };
+  }
+
+  const sequence = parseActionSequence(body, matchAt);
+  if (!sequence.ok) {
+    return { kind: "unsupported", reason: sequence.reason };
+  }
+
+  if (hasDisallowedRangeQualifier(sequence.steps)) {
+    return { kind: "unsupported", reason: "unsupported-syntax" };
+  }
+
+  return explainedResult(
+    [
+      {
+        kind: "repeat-across-rows",
+        rowKind: scope.rowKind,
+        declaredCount: scope.declaredCount,
+        steps: sequence.steps,
+      },
+    ],
+    scope,
     countSplit.expectedStitchCount,
   );
 }
@@ -736,12 +881,21 @@ export function formatActionLine(action: ExplainedAction): string {
   return `Fais ${action.quantity} × ${action.term.label}${qualifier}.`;
 }
 
+function pluralRowKind(rowKind: RowKind): string {
+  return rowKind === "rang" ? "rangs" : "tours";
+}
+
 export function formatExpectedStitchCountLine(
   count: number,
-  row?: { kind: RowKind; number: number },
+  scope?: RowScope,
   repeatUntilEnd?: RowKind,
 ): string {
-  const target = row?.kind ?? repeatUntilEnd;
+  if (scope?.kind === "range") {
+    return `Le patron indique ${count} mailles pour cette plage de ${pluralRowKind(scope.rowKind)}.`;
+  }
+
+  const target =
+    scope?.kind === "single" ? scope.rowKind : repeatUntilEnd;
   if (target === "rang") {
     return `Le patron indique ${count} mailles à la fin de ce rang.`;
   }
@@ -773,6 +927,10 @@ function headingForPart(
     return `Répète jusqu’à la fin du ${part.rowKind} :`;
   }
 
+  if (part.kind === "repeat-across-rows") {
+    return `Fais la même instruction pendant ${part.declaredCount} ${pluralRowKind(part.rowKind)} :`;
+  }
+
   if (sandwich && index === 0) {
     return "Avant la répétition :";
   }
@@ -801,8 +959,10 @@ export function toBeginnerExplanationCopy(
     }),
   };
 
-  if (explanation.row) {
-    copy.rowIntro = `Pour le ${explanation.row.kind} ${explanation.row.number} :`;
+  if (explanation.scope?.kind === "single") {
+    copy.rowIntro = `Pour le ${explanation.scope.rowKind} ${explanation.scope.number} :`;
+  } else if (explanation.scope?.kind === "range") {
+    copy.rowIntro = `Pour les ${pluralRowKind(explanation.scope.rowKind)} ${explanation.scope.from} à ${explanation.scope.to} :`;
   }
 
   if (hasPositionQualifier(allExplainedSteps(explanation.parts))) {
@@ -815,7 +975,7 @@ export function toBeginnerExplanationCopy(
     );
     copy.expectedStitchCountLine = formatExpectedStitchCountLine(
       explanation.expectedStitchCount,
-      explanation.row,
+      explanation.scope,
       untilEnd?.kind === "repeat-until-end" ? untilEnd.rowKind : undefined,
     );
   }

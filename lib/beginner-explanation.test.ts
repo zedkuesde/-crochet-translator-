@@ -75,6 +75,15 @@ function untilEndOf(
   return part?.kind === "repeat-until-end" ? part.rowKind : undefined;
 }
 
+function acrossRowsOf(
+  result: Extract<BeginnerExplanation, { kind: "explained" }>,
+) {
+  const part = result.parts.find(
+    (candidate) => candidate.kind === "repeat-across-rows",
+  );
+  return part?.kind === "repeat-across-rows" ? part : undefined;
+}
+
 function firstActionLines(copy: BeginnerExplanationCopy): string[] {
   return copy.parts[0]?.actionLines ?? [];
 }
@@ -85,7 +94,7 @@ describe("parseBeginnerExplanation — cas expliqués", () => {
     assertExplained(result);
     assert.equal(repeatCountOf(result), 6);
     assert.equal(result.expectedStitchCount, 18);
-    assert.equal(result.row, undefined);
+    assert.equal(result.scope, undefined);
     assert.deepEqual(
       allSteps(result).map((step) => [step.quantity, step.term.code, step.term.label]),
       [
@@ -128,7 +137,7 @@ describe("parseBeginnerExplanation — cas expliqués", () => {
   it("explique R3 : 6 ms (6) avec préfixe de rang", () => {
     const result = parseBeginnerExplanation("R3 : 6 ms (6)", terms);
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "rang", number: 3 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "rang", number: 3 });
     assert.equal(repeatCountOf(result), undefined);
     assert.equal(result.expectedStitchCount, 6);
     assert.deepEqual(allSteps(result), [
@@ -149,7 +158,7 @@ describe("parseBeginnerExplanation — cas expliqués", () => {
   it("explique Tour 2 : 2 ms, 1 aug (3)", () => {
     const result = parseBeginnerExplanation("Tour 2 : 2 ms, 1 aug (3)", terms);
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "tour", number: 2 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 2 });
     assert.equal(result.expectedStitchCount, 3);
     assert.equal(allSteps(result).length, 2);
 
@@ -274,7 +283,7 @@ describe("parseBeginnerExplanation — qualificatifs d’action", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "rang", number: 2 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "rang", number: 2 });
     assert.equal(repeatCountOf(result), undefined);
     assert.equal(untilEndOf(result), undefined);
     assert.equal(result.expectedStitchCount, 12);
@@ -321,7 +330,7 @@ describe("parseBeginnerExplanation — qualificatifs d’action", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "rang", number: 3 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "rang", number: 3 });
     assert.equal(result.expectedStitchCount, 18);
     assert.equal(allSteps(result)[0]?.qualifier, "next-stitch");
     assert.equal(allSteps(result)[1]?.qualifier, undefined);
@@ -369,7 +378,7 @@ describe("parseBeginnerExplanation — jusqu’à la fin du rang/tour", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "tour", number: 4 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 4 });
     assert.equal(repeatCountOf(result), undefined);
     assert.equal(untilEndOf(result), "tour");
     assert.equal(result.expectedStitchCount, 24);
@@ -395,7 +404,7 @@ describe("parseBeginnerExplanation — jusqu’à la fin du rang/tour", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "rang", number: 4 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "rang", number: 4 });
     assert.equal(untilEndOf(result), "rang");
     assert.equal(
       toBeginnerExplanationCopy(result).parts[0]?.heading,
@@ -409,7 +418,7 @@ describe("parseBeginnerExplanation — jusqu’à la fin du rang/tour", () => {
       terms,
     );
     assertExplained(result);
-    assert.equal(result.row, undefined);
+    assert.equal(result.scope, undefined);
     assert.equal(untilEndOf(result), "tour");
     assert.equal(result.expectedStitchCount, 24);
 
@@ -442,7 +451,7 @@ describe("parseBeginnerExplanation — à répéter N fois", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "rang", number: 3 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "rang", number: 3 });
     assert.equal(repeatCountOf(result), 6);
     assert.equal(untilEndOf(result), undefined);
     assert.equal(result.expectedStitchCount, 18);
@@ -469,7 +478,7 @@ describe("parseBeginnerExplanation — à répéter N fois", () => {
       terms,
     );
     assertExplained(result);
-    assert.equal(result.row, undefined);
+    assert.equal(result.scope, undefined);
     assert.equal(repeatCountOf(result), 6);
     assert.equal(result.expectedStitchCount, undefined);
     assert.equal(allSteps(result).length, 2);
@@ -481,7 +490,7 @@ describe("parseBeginnerExplanation — à répéter N fois", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "tour", number: 2 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 2 });
     assert.equal(repeatCountOf(result), 3);
     assert.equal(result.expectedStitchCount, 9);
 
@@ -695,7 +704,7 @@ describe("parseBeginnerExplanation — jalon G totaux [N]", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "tour", number: 3 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 3 });
     assert.equal(repeatCountOf(result), 8);
     assert.equal(result.expectedStitchCount, 24);
     assert.deepEqual(
@@ -736,7 +745,7 @@ describe("parseBeginnerExplanation — jalon G totaux [N]", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "tour", number: 20 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 20 });
     assert.equal(repeatCountOf(result), 2);
     assert.equal(result.expectedStitchCount, 24);
     assert.deepEqual(
@@ -892,7 +901,7 @@ describe("parseBeginnerExplanation — jalon G m contextuel", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "tour", number: 11 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 11 });
     assert.equal(repeatCountOf(result), undefined);
     assert.equal(result.expectedStitchCount, 48);
     assert.deepEqual(allSteps(result), [
@@ -959,7 +968,7 @@ describe("parseBeginnerExplanation — jalon G hors scope réel", () => {
   it("explique Tour 2 : 8 aug[2] — quantité + terme + total écrit, sans calcul", () => {
     const result = parseBeginnerExplanation("Tour 2 : 8 aug[2]", terms);
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "tour", number: 2 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 2 });
     assert.equal(repeatCountOf(result), undefined);
     assert.equal(result.expectedStitchCount, 2);
     assert.deepEqual(allSteps(result), [
@@ -972,14 +981,6 @@ describe("parseBeginnerExplanation — jalon G hors scope réel", () => {
 
   it("rejette Tour 2 : aug[2] sans quantité", () => {
     const result = parseBeginnerExplanation("Tour 2 : aug[2]", terms);
-    assert.equal(result.kind, "unsupported");
-  });
-
-  it("rejette Tours 6-9 (4 tours) : 1 ms dans chaque m[3]", () => {
-    const result = parseBeginnerExplanation(
-      "Tours 6-9 (4 tours) : 1 ms dans chaque m[3]",
-      terms,
-    );
     assert.equal(result.kind, "unsupported");
   });
 
@@ -999,13 +1000,6 @@ describe("parseBeginnerExplanation — jalon G hors scope réel", () => {
     assert.equal(result.kind, "unsupported");
   });
 
-  it("rejette Tours 30-32 (3 tours) : 1 ms dans chaque m", () => {
-    const result = parseBeginnerExplanation(
-      "Tours 30-32 (3 tours) : 1 ms dans chaque m",
-      terms,
-    );
-    assert.equal(result.kind, "unsupported");
-  });
 });
 
 describe("parseBeginnerExplanation — jalon H anneau magique", () => {
@@ -1015,7 +1009,7 @@ describe("parseBeginnerExplanation — jalon H anneau magique", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "tour", number: 1 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 1 });
     assert.equal(repeatCountOf(result), undefined);
     assert.equal(untilEndOf(result), undefined);
     assert.equal(result.expectedStitchCount, 8);
@@ -1044,7 +1038,7 @@ describe("parseBeginnerExplanation — jalon H anneau magique", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "tour", number: 1 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 1 });
     assert.equal(result.expectedStitchCount, 1);
     assert.equal(allSteps(result)[0]?.quantity, 8);
     assert.equal(allSteps(result)[0]?.term.code, "ms");
@@ -1065,7 +1059,7 @@ describe("parseBeginnerExplanation — jalon H anneau magique", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "rang", number: 1 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "rang", number: 1 });
     assert.equal(result.expectedStitchCount, 6);
     assert.equal(allSteps(result)[0]?.qualifier, "magic-ring");
     assert.deepEqual(toBeginnerExplanationCopy(result), {
@@ -1085,7 +1079,7 @@ describe("parseBeginnerExplanation — jalon H anneau magique", () => {
       terms,
     );
     assertExplained(result);
-    assert.equal(result.row, undefined);
+    assert.equal(result.scope, undefined);
     assert.equal(result.expectedStitchCount, 1);
     assert.equal(allSteps(result)[0]?.qualifier, "magic-ring");
     assert.equal(
@@ -1104,7 +1098,7 @@ describe("parseBeginnerExplanation — jalon H anneau magique", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "tour", number: 1 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 1 });
     assert.equal(result.expectedStitchCount, 8);
     assert.equal(allSteps(result)[0]?.qualifier, "magic-ring");
     assert.equal(
@@ -1119,7 +1113,7 @@ describe("parseBeginnerExplanation — jalon H anneau magique", () => {
       terms,
     );
     assertExplained(result);
-    assert.equal(result.row, undefined);
+    assert.equal(result.scope, undefined);
     assert.equal(result.expectedStitchCount, undefined);
     assert.equal(allSteps(result)[0]?.qualifier, "magic-ring");
     assert.equal(toBeginnerExplanationCopy(result).expectedStitchCountLine, undefined);
@@ -1135,7 +1129,7 @@ describe("parseBeginnerExplanation — jalon H anneau magique", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "tour", number: 1 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 1 });
     assert.equal(result.expectedStitchCount, 1);
     assert.equal(allSteps(result)[0]?.qualifier, "magic-ring");
   });
@@ -1323,7 +1317,7 @@ describe("parseBeginnerExplanation — jalon I sandwich", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "tour", number: 15 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 15 });
     assert.equal(result.expectedStitchCount, 3);
     assert.equal(result.parts.length, 3);
     assert.deepEqual(result.parts[0], {
@@ -1380,7 +1374,7 @@ describe("parseBeginnerExplanation — jalon I sandwich", () => {
       terms,
     );
     assertExplained(result);
-    assert.deepEqual(result.row, { kind: "tour", number: 17 });
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 17 });
     assert.equal(result.expectedStitchCount, undefined);
     assert.equal(result.parts.length, 3);
     assert.equal(result.parts[0]?.kind, "actions");
@@ -1590,5 +1584,380 @@ describe("parseBeginnerExplanation — jalon I sandwich", () => {
       terms,
     );
     assert.equal(result.kind, "unsupported");
+  });
+});
+
+describe("parseBeginnerExplanation — jalon J plages de tours/rangs", () => {
+  const eachMs = {
+    quantity: 1,
+    term: { id: "ms", code: "ms", label: "Maille serrée" },
+    qualifier: "each-stitch" as const,
+  };
+
+  it("explique Tours 6-9 (4 tours) : 1 ms dans chaque m[1]", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : 1 ms dans chaque m[1]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.scope, {
+      kind: "range",
+      rowKind: "tour",
+      from: 6,
+      to: 9,
+      declaredCount: 4,
+    });
+    assert.equal(result.expectedStitchCount, 1);
+    assert.equal(result.parts.length, 1);
+    assert.deepEqual(result.parts[0], {
+      kind: "repeat-across-rows",
+      rowKind: "tour",
+      declaredCount: 4,
+      steps: [eachMs],
+    });
+    assert.equal(repeatCountOf(result), undefined);
+    assert.equal(untilEndOf(result), undefined);
+
+    assert.deepEqual(toBeginnerExplanationCopy(result), {
+      rowIntro: "Pour les tours 6 à 9 :",
+      parts: [
+        {
+          heading: "Fais la même instruction pendant 4 tours :",
+          actionLines: ["Fais 1 × Maille serrée dans chaque maille."],
+        },
+      ],
+      positionCautionNote: POSITION_QUALIFIER_NOTE,
+      expectedStitchCountLine:
+        "Le patron indique 1 mailles pour cette plage de tours.",
+    });
+  });
+
+  it("explique Tours 6-9 (4 tours) : 1 ms dans chaque m [40] avec le total écrit", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : 1 ms dans chaque m [40]",
+      terms,
+    );
+    assertExplained(result);
+    assert.equal(result.expectedStitchCount, 40);
+    assert.equal(acrossRowsOf(result)?.declaredCount, 4);
+    assert.deepEqual(toBeginnerExplanationCopy(result), {
+      rowIntro: "Pour les tours 6 à 9 :",
+      parts: [
+        {
+          heading: "Fais la même instruction pendant 4 tours :",
+          actionLines: ["Fais 1 × Maille serrée dans chaque maille."],
+        },
+      ],
+      positionCautionNote: POSITION_QUALIFIER_NOTE,
+      expectedStitchCountLine:
+        "Le patron indique 40 mailles pour cette plage de tours.",
+    });
+  });
+
+  it("explique Tours 30-32 (3 tours) : 1 ms dans chaque m sans total", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 30-32 (3 tours) : 1 ms dans chaque m",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.scope, {
+      kind: "range",
+      rowKind: "tour",
+      from: 30,
+      to: 32,
+      declaredCount: 3,
+    });
+    assert.equal(result.expectedStitchCount, undefined);
+    assert.deepEqual(acrossRowsOf(result)?.steps, [eachMs]);
+    assert.equal(
+      toBeginnerExplanationCopy(result).expectedStitchCountLine,
+      undefined,
+    );
+    assert.equal(
+      toBeginnerExplanationCopy(result).parts[0]?.heading,
+      "Fais la même instruction pendant 3 tours :",
+    );
+  });
+
+  it("explique Rangs 2-4 (3 rangs) : 2 ms dans chaque maille (12)", () => {
+    const result = parseBeginnerExplanation(
+      "Rangs 2-4 (3 rangs) : 2 ms dans chaque maille (12)",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.scope, {
+      kind: "range",
+      rowKind: "rang",
+      from: 2,
+      to: 4,
+      declaredCount: 3,
+    });
+    assert.equal(result.expectedStitchCount, 12);
+    assert.deepEqual(result.parts[0], {
+      kind: "repeat-across-rows",
+      rowKind: "rang",
+      declaredCount: 3,
+      steps: [
+        {
+          quantity: 2,
+          term: { id: "ms", code: "ms", label: "Maille serrée" },
+          qualifier: "each-stitch",
+        },
+      ],
+    });
+
+    assert.deepEqual(toBeginnerExplanationCopy(result), {
+      rowIntro: "Pour les rangs 2 à 4 :",
+      parts: [
+        {
+          heading: "Fais la même instruction pendant 3 rangs :",
+          actionLines: ["Fais 2 × Maille serrée dans chaque maille."],
+        },
+      ],
+      positionCautionNote: POSITION_QUALIFIER_NOTE,
+      expectedStitchCountLine:
+        "Le patron indique 12 mailles pour cette plage de rangs.",
+    });
+  });
+
+  it("accepte la casse et les espaces TOURS 6 – 9 (4 TOURS) : 1 MS DANS TOUTES LES M[1]", () => {
+    const result = parseBeginnerExplanation(
+      "TOURS 6 – 9 (4 TOURS) : 1 MS DANS TOUTES LES M[1]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.scope, {
+      kind: "range",
+      rowKind: "tour",
+      from: 6,
+      to: 9,
+      declaredCount: 4,
+    });
+    assert.equal(acrossRowsOf(result)?.steps[0]?.qualifier, "each-stitch");
+    assert.equal(
+      firstActionLines(toBeginnerExplanationCopy(result))[0],
+      "Fais 1 × Maille serrée dans chaque maille.",
+    );
+  });
+
+  it("accepte le demi-cadratin Tours 6–9 (4 tours) : 1 ms dans chaque m[1]", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6–9 (4 tours) : 1 ms dans chaque m[1]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.scope, {
+      kind: "range",
+      rowKind: "tour",
+      from: 6,
+      to: 9,
+      declaredCount: 4,
+    });
+    assert.equal(result.expectedStitchCount, 1);
+  });
+
+  it("recopie le nombre de tours déclaré sans le recalculer", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (3 tours) : 1 ms dans chaque m[1]",
+      terms,
+    );
+    assertExplained(result);
+    assert.equal(result.scope?.kind, "range");
+    if (result.scope?.kind === "range") {
+      assert.equal(result.scope.declaredCount, 3);
+      assert.equal(result.scope.from, 6);
+      assert.equal(result.scope.to, 9);
+    }
+    assert.equal(acrossRowsOf(result)?.declaredCount, 3);
+    assert.notEqual(acrossRowsOf(result)?.declaredCount, 4);
+    assert.equal(
+      toBeginnerExplanationCopy(result).parts[0]?.heading,
+      "Fais la même instruction pendant 3 tours :",
+    );
+    assert.notEqual(
+      toBeginnerExplanationCopy(result).parts[0]?.heading,
+      "Fais la même instruction pendant 4 tours :",
+    );
+  });
+
+  it("conserve une séquence simple sans qualificatif et sans note de prudence", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : 1 ms, 1 aug[1]",
+      terms,
+    );
+    assertExplained(result);
+    assert.equal(acrossRowsOf(result)?.steps.length, 2);
+    assert.equal(toBeginnerExplanationCopy(result).positionCautionNote, undefined);
+  });
+
+  it("rejette Tour 6-9 (4 tours) au singulier", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 6-9 (4 tours) : 1 ms dans chaque m[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Tours 6-9 (4 rangs) — désaccord de type", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 rangs) : 1 ms dans chaque m[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Rangs 2-4 (3 tours) — désaccord de type", () => {
+    const result = parseBeginnerExplanation(
+      "Rangs 2-4 (3 tours) : 2 ms dans chaque maille (12)",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Tours 6-9 sans (N tours)", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 : 1 ms dans chaque m[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette l’absence de deux-points", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) 1 ms dans chaque m[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Tours 6 à 9", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6 à 9 (4 tours) : 1 ms dans chaque m[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette (quatre tours) en lettres", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (quatre tours) : 1 ms dans chaque m[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette un bloc (… ) N fois dans une plage", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : (1 ms, 1 aug) 8 fois[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette à répéter N fois dans une plage", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : 1 ms, 1 aug, à répéter 6 fois[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette jusqu’à la fin du tour dans une plage", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : 1 ms dans chaque m jusqu’à la fin du tour[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette un changement de couleur avant le corps", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : fil blanc : 1 ms dans chaque m[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette un point-virgule / changement de couleur", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : 1 ms dans chaque m; fil blanc[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette du texte libre après l’action", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : 1 ms dans chaque m  texte[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Tours 9-6 (4 tours) — bornes inversées", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 9-6 (4 tours) : 1 ms dans chaque m[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette (0 tours)", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (0 tours) : 1 ms dans chaque m[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette dans la maille suivante dans une plage", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : 1 ms dans la maille suivante[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette un anneau magique dans une plage", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : 8 ms dans un anneau magique[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette le tiret cadratin", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6—9 (4 tours) : 1 ms dans chaque m[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("conserve le Tour 3 singulier du jalon G", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 3 : (1 ms, 1 aug) 8 fois[2]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.scope, {
+      kind: "single",
+      rowKind: "tour",
+      number: 3,
+    });
+    assert.equal(repeatCountOf(result), 8);
+    assert.equal(result.expectedStitchCount, 2);
+    assert.equal(acrossRowsOf(result), undefined);
+    assert.deepEqual(toBeginnerExplanationCopy(result), {
+      rowIntro: "Pour le tour 3 :",
+      parts: [
+        {
+          heading: "Répète 8 fois :",
+          actionLines: ["Fais 1 × Maille serrée.", "Fais 1 × Augmentation."],
+        },
+      ],
+      expectedStitchCountLine:
+        "Le patron indique 2 mailles à la fin de ce tour.",
+    });
   });
 });
