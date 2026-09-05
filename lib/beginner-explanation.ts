@@ -10,7 +10,7 @@ export type ExplainedTerm = {
   label: string;
 };
 
-export type ActionQualifier = "each-stitch" | "next-stitch";
+export type ActionQualifier = "each-stitch" | "next-stitch" | "magic-ring";
 
 export type ExplainedAction = {
   quantity: number;
@@ -78,6 +78,9 @@ const QUALIFIER_PHRASES: ReadonlyArray<{
   { folded: "dans la prochaine maille", qualifier: "next-stitch" },
   { folded: "dans chaque m", qualifier: "each-stitch" },
   { folded: "dans toutes les m", qualifier: "each-stitch" },
+  { folded: "dans un anneau magique", qualifier: "magic-ring" },
+  { folded: "dans une boucle magique", qualifier: "magic-ring" },
+  { folded: "dans un cercle magique", qualifier: "magic-ring" },
 ];
 
 type ParseFailure = {
@@ -209,6 +212,25 @@ function hasPositionQualifier(steps: ExplainedAction[]): boolean {
   return steps.some((step) => step.qualifier !== undefined);
 }
 
+function hasMagicRingQualifier(steps: ExplainedAction[]): boolean {
+  return steps.some((step) => step.qualifier === "magic-ring");
+}
+
+function isMagicRingMisused(
+  steps: ExplainedAction[],
+  extras?: { repeatCount?: number; repeatUntilEnd?: RowKind },
+): boolean {
+  if (!hasMagicRingQualifier(steps)) {
+    return false;
+  }
+
+  return (
+    steps.length !== 1 ||
+    extras?.repeatCount !== undefined ||
+    extras?.repeatUntilEnd !== undefined
+  );
+}
+
 function parseAction(
   fragment: string,
   matchAt: TermMatcher,
@@ -292,6 +314,10 @@ function parseActionSequence(
     return { ok: false, reason: "no-supported-pattern" };
   }
 
+  if (isMagicRingMisused(steps)) {
+    return { ok: false, reason: "unsupported-syntax" };
+  }
+
   return { ok: true, steps };
 }
 
@@ -365,10 +391,14 @@ function tryParseRepeatBlock(
 }
 
 function formatQualifierSuffix(qualifier: ActionQualifier): string {
-  if (qualifier === "each-stitch") {
-    return " dans chaque maille";
+  switch (qualifier) {
+    case "each-stitch":
+      return " dans chaque maille";
+    case "next-stitch":
+      return " dans la maille suivante";
+    case "magic-ring":
+      return " dans un anneau magique";
   }
-  return " dans la maille suivante";
 }
 
 export function parseBeginnerExplanation(
@@ -430,6 +460,10 @@ export function parseBeginnerExplanation(
       return { kind: "unsupported", reason: "unsupported-syntax" };
     }
 
+    if (isMagicRingMisused(sequence.steps, { repeatUntilEnd })) {
+      return { kind: "unsupported", reason: "unsupported-syntax" };
+    }
+
     if (prefix && prefix.row.kind !== repeatUntilEnd) {
       return { kind: "unsupported", reason: "unsupported-syntax" };
     }
@@ -460,7 +494,11 @@ export function parseBeginnerExplanation(
       return { kind: "unsupported", reason: sequence.reason };
     }
 
-    if (sequence.steps.length < 2 || hasPositionQualifier(sequence.steps)) {
+    if (
+      sequence.steps.length < 2 ||
+      hasPositionQualifier(sequence.steps) ||
+      isMagicRingMisused(sequence.steps, { repeatCount: phraseRepeatCount })
+    ) {
       return { kind: "unsupported", reason: "unsupported-syntax" };
     }
 
@@ -496,6 +534,10 @@ export function parseBeginnerExplanation(
       return { kind: "unsupported", reason: sequence.reason };
     }
     steps = sequence.steps;
+  }
+
+  if (isMagicRingMisused(steps, { repeatCount })) {
+    return { kind: "unsupported", reason: "unsupported-syntax" };
   }
 
   const explanation: Extract<BeginnerExplanation, { kind: "explained" }> = {

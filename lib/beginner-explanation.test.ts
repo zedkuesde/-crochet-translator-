@@ -898,14 +898,6 @@ describe("parseBeginnerExplanation — jalon G m contextuel", () => {
 });
 
 describe("parseBeginnerExplanation — jalon G hors scope réel", () => {
-  it("rejette Tour 1 : 8 ms dans un anneau magique[1]", () => {
-    const result = parseBeginnerExplanation(
-      "Tour 1 : 8 ms dans un anneau magique[1]",
-      terms,
-    );
-    assert.equal(result.kind, "unsupported");
-  });
-
   it("explique Tour 2 : 8 aug[2] — quantité + terme + total écrit, sans calcul", () => {
     const result = parseBeginnerExplanation("Tour 2 : 8 aug[2]", terms);
     assertExplained(result);
@@ -960,6 +952,293 @@ describe("parseBeginnerExplanation — jalon G hors scope réel", () => {
   it("rejette Tours 30-32 (3 tours) : 1 ms dans chaque m", () => {
     const result = parseBeginnerExplanation(
       "Tours 30-32 (3 tours) : 1 ms dans chaque m",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+});
+
+describe("parseBeginnerExplanation — jalon H anneau magique", () => {
+  it("explique Tour 1 : 8 ms dans un anneau magique [8]", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : 8 ms dans un anneau magique [8]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.row, { kind: "tour", number: 1 });
+    assert.equal(result.repeatCount, undefined);
+    assert.equal(result.repeatUntilEnd, undefined);
+    assert.equal(result.expectedStitchCount, 8);
+    assert.deepEqual(result.steps, [
+      {
+        quantity: 8,
+        term: { id: "ms", code: "ms", label: "Maille serrée" },
+        qualifier: "magic-ring",
+      },
+    ]);
+
+    assert.deepEqual(toBeginnerExplanationCopy(result), {
+      rowIntro: "Pour le tour 1 :",
+      actionLines: ["Fais 8 × Maille serrée dans un anneau magique."],
+      positionCautionNote: POSITION_QUALIFIER_NOTE,
+      expectedStitchCountLine:
+        "Le patron indique 8 mailles à la fin de ce tour.",
+    });
+  });
+
+  it("explique Tour 1 : 8 ms dans un anneau magique[1] sans espace avant le total", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : 8 ms dans un anneau magique[1]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.row, { kind: "tour", number: 1 });
+    assert.equal(result.expectedStitchCount, 1);
+    assert.equal(result.steps[0]?.quantity, 8);
+    assert.equal(result.steps[0]?.term.code, "ms");
+    assert.equal(result.steps[0]?.qualifier, "magic-ring");
+    assert.equal(
+      toBeginnerExplanationCopy(result).actionLines[0],
+      "Fais 8 × Maille serrée dans un anneau magique.",
+    );
+    assert.equal(
+      toBeginnerExplanationCopy(result).expectedStitchCountLine,
+      "Le patron indique 1 mailles à la fin de ce tour.",
+    );
+  });
+
+  it("explique Rang 1 : 6 ms dans une boucle magique (6) avec libellé canonique", () => {
+    const result = parseBeginnerExplanation(
+      "Rang 1 : 6 ms dans une boucle magique (6)",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.row, { kind: "rang", number: 1 });
+    assert.equal(result.expectedStitchCount, 6);
+    assert.equal(result.steps[0]?.qualifier, "magic-ring");
+    assert.deepEqual(toBeginnerExplanationCopy(result), {
+      rowIntro: "Pour le rang 1 :",
+      actionLines: ["Fais 6 × Maille serrée dans un anneau magique."],
+      positionCautionNote: POSITION_QUALIFIER_NOTE,
+      expectedStitchCountLine:
+        "Le patron indique 6 mailles à la fin de ce rang.",
+    });
+  });
+
+  it("explique 8 ms dans un cercle magique[1] avec libellé canonique", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans un cercle magique[1]",
+      terms,
+    );
+    assertExplained(result);
+    assert.equal(result.row, undefined);
+    assert.equal(result.expectedStitchCount, 1);
+    assert.equal(result.steps[0]?.qualifier, "magic-ring");
+    assert.equal(
+      toBeginnerExplanationCopy(result).actionLines[0],
+      "Fais 8 × Maille serrée dans un anneau magique.",
+    );
+    assert.equal(
+      toBeginnerExplanationCopy(result).positionCautionNote,
+      POSITION_QUALIFIER_NOTE,
+    );
+  });
+
+  it("explique Tour 1 : 8 ms dans un cercle magique [8]", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : 8 ms dans un cercle magique [8]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.row, { kind: "tour", number: 1 });
+    assert.equal(result.expectedStitchCount, 8);
+    assert.equal(result.steps[0]?.qualifier, "magic-ring");
+    assert.equal(
+      toBeginnerExplanationCopy(result).actionLines[0],
+      "Fais 8 × Maille serrée dans un anneau magique.",
+    );
+  });
+
+  it("explique 8 ms dans un anneau magique sans préfixe ni total", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans un anneau magique",
+      terms,
+    );
+    assertExplained(result);
+    assert.equal(result.row, undefined);
+    assert.equal(result.expectedStitchCount, undefined);
+    assert.equal(result.steps[0]?.qualifier, "magic-ring");
+    assert.equal(toBeginnerExplanationCopy(result).expectedStitchCountLine, undefined);
+    assert.equal(
+      toBeginnerExplanationCopy(result).positionCautionNote,
+      POSITION_QUALIFIER_NOTE,
+    );
+  });
+
+  it("accepte la casse TOUR 1 : 8 MS DANS UN ANNEAU MAGIQUE[1]", () => {
+    const result = parseBeginnerExplanation(
+      "TOUR 1 : 8 MS DANS UN ANNEAU MAGIQUE[1]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.row, { kind: "tour", number: 1 });
+    assert.equal(result.expectedStitchCount, 1);
+    assert.equal(result.steps[0]?.qualifier, "magic-ring");
+  });
+
+  it("accepte les espaces internes Tour 1 : 8   ms   dans   un   anneau   magique[1]", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : 8   ms   dans   un   anneau   magique[1]",
+      terms,
+    );
+    assertExplained(result);
+    assert.equal(result.steps[0]?.quantity, 8);
+    assert.equal(result.steps[0]?.qualifier, "magic-ring");
+    assert.equal(result.expectedStitchCount, 1);
+  });
+
+  it("accepte un espace final 8 ms dans un anneau magique ", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans un anneau magique ",
+      terms,
+    );
+    assertExplained(result);
+    assert.equal(result.steps[0]?.qualifier, "magic-ring");
+    assert.equal(result.expectedStitchCount, undefined);
+  });
+
+  it("rejette 8 ms dans l’anneau magique[1]", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans l’anneau magique[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans une maille", () => {
+    const result = parseBeginnerExplanation("8 ms dans une maille", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans la même maille", () => {
+    const result = parseBeginnerExplanation("8 ms dans la même maille", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans un arceau de 2 ml", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans un arceau de 2 ml",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans une boucle", () => {
+    const result = parseBeginnerExplanation("8 ms dans une boucle", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans un anneau", () => {
+    const result = parseBeginnerExplanation("8 ms dans un anneau", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans l’anneau de départ", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans l’anneau de départ",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans le cercle", () => {
+    const result = parseBeginnerExplanation("8 ms dans le cercle", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans une boucle magique de départ", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans une boucle magique de départ",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms autour de l’anneau magique", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms autour de l’anneau magique",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans un anneau magique, puis 1 aug", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans un anneau magique, puis 1 aug",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans un anneau magique.", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans un anneau magique.",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans une boucle magique  avec une phrase[1]", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans une boucle magique  avec une phrase[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans un anneau magique.[1]", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans un anneau magique.[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette deux totaux 8 ms dans un anneau magique (8)[1]", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans un anneau magique (8)[1]",
+      terms,
+    );
+    assert.deepEqual(result, { kind: "unsupported", reason: "ambiguous" });
+  });
+
+  it("rejette 8 ms dans un anneau magique [huit]", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans un anneau magique [huit]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette (8 ms dans un anneau magique, 1 aug) 2 fois[2]", () => {
+    const result = parseBeginnerExplanation(
+      "(8 ms dans un anneau magique, 1 aug) 2 fois[2]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans un anneau magique, 1 aug[3]", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans un anneau magique, 1 aug[3]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 8 ms dans un anneau magique jusqu’à la fin du tour[1]", () => {
+    const result = parseBeginnerExplanation(
+      "8 ms dans un anneau magique jusqu’à la fin du tour[1]",
       terms,
     );
     assert.equal(result.kind, "unsupported");
