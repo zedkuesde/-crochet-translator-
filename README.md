@@ -229,19 +229,22 @@ Sous le patron original (jamais modifié), l’encadré **Explication débutant*
 
 - quantité + terme connu (`1ms`, `2 ms`, `1 diminution`) ;
 - bloc encadré `*…*`, `[…]` ou `(…)` **immédiatement** suivi de `xN` / `×N` ;
-- total final `(N)` en fin d’instruction, présenté comme une indication du patron ;
+- bloc parenthésé `(…)` suivi de `N fois` (`N` de 1 à 999), uniquement avec **au moins deux** actions simples sans qualificatif — restriction volontaire du jalon G, pas un jugement sur la notation crochet ;
+- total final `(N)` ou `[N]` en toute fin d’instruction (entier ASCII 1–9999), présenté comme une indication du patron, sans aucun calcul ;
 - préfixe simple `R3 :`, `Rang 3 :`, `Tour 2 :`, `T3 :` ;
-- qualificatif d’action simple, immédiatement après `quantité + terme` : `dans chaque maille`, `dans toutes les mailles`, `dans la maille suivante`, `dans la prochaine maille` ;
-- suffixe final `jusqu’à la fin du rang` ou `jusqu’à la fin du tour` (apostrophe ASCII ou typographique), uniquement sur une séquence d’**au moins deux** actions séparées par virgule, avant le total `(N)` éventuel ;
-- suffixe final `, à répéter N fois` (`N` de 1 à 999), uniquement sur une séquence d’**au moins deux** actions simples sans qualificatif, avant le total `(N)` éventuel.
+- qualificatif d’action simple, immédiatement après `quantité + terme` : `dans chaque maille`, `dans toutes les mailles`, `dans la maille suivante`, `dans la prochaine maille`, et les variantes contextuelles `dans chaque m` / `dans toutes les m` (le `m` n’est **pas** un code du dictionnaire) ;
+- suffixe final `jusqu’à la fin du rang` ou `jusqu’à la fin du tour` (apostrophe ASCII ou typographique), uniquement sur une séquence d’**au moins deux** actions séparées par virgule, avant le total `(N)` / `[N]` éventuel ;
+- suffixe final `, à répéter N fois` (`N` de 1 à 999), uniquement sur une séquence d’**au moins deux** actions simples sans qualificatif, avant le total `(N)` / `[N]` éventuel.
 
 Formulation des actions : `Fais 2 × Maille serrée.` (quantité lisible, **label exact** de la base, sans pluralisation). Un qualificatif s’affiche après le label, en forme canonique (`dans chaque maille` / `dans la maille suivante`). Le suffixe « jusqu’à la fin » produit `Répète jusqu’à la fin du rang/tour :`, jamais un nombre de répétitions. Si au moins une action a un qualificatif de position, une note de prudence rappelle que l’application ne calcule ni le nombre de mailles ni la position exacte.
 
-Le suffixe « jusqu’à la fin » doit correspondre au préfixe : `Rang`/`R` uniquement avec `rang`, `Tour`/`T` uniquement avec `tour`. Sans préfixe, le suffixe reste acceptable s’il nomme lui-même `rang` ou `tour`. Le suffixe `, à répéter N fois` réutilise la même formulation que `xN` (`Répète 6 fois :`) et n’est jamais combiné avec un bloc `*…* xN` ni avec « jusqu’à la fin ».
+Le suffixe « jusqu’à la fin » doit correspondre au préfixe : `Rang`/`R` uniquement avec `rang`, `Tour`/`T` uniquement avec `tour`. Sans préfixe, le suffixe reste acceptable s’il nomme lui-même `rang` ou `tour`. Le suffixe `, à répéter N fois` et la forme `(…) N fois` réutilisent la même formulation que `xN` (`Répète 6 fois :`). `(…) N fois` n’est jamais combiné avec `xN`, « jusqu’à la fin » ou `, à répéter N fois`. Un `[N]` final n’est pas confondu avec un bloc `[actions] xN` : seul le crochet numérique tout en fin d’instruction est un total.
+
+`m` n’est reconnu que comme dernier mot des qualificatifs `dans chaque m` et `dans toutes les m`. Il n’est pas ajouté au catalogue, n’est pas cliquable dans le patron, et s’affiche toujours sous la forme canonique `dans chaque maille`.
 
 Si le format n’est pas reconnu, l’encadré affiche une note discrète et ne propose **aucune** interprétation. Les deux interrupteurs sont indépendants : l’explication continue si les aides cliquables sont désactivées. L’interrupteur **Explication débutant** est activé par défaut ; réglage dans `localStorage` (`crochet-translator:show-beginner-explanations`).
 
-Non expliqué automatiquement : termes sans quantité, blocs sans `xN`, parenthèses isolées `(18)`, imbrications, phrases libres, anglais, fuzzy matching, ponctuation inattendue, une seule action suivie de « jusqu’à la fin » ou de `, à répéter N fois`, combinaison `xN` + « jusqu’à la fin » ou `xN` + `, à répéter N fois`, qualificatif avec `, à répéter N fois`, `répéter 6 fois` sans `à`, `à répéter six fois`, qualificatif à l’intérieur d’un bloc `*…* xN` / `[…] xN`, désaccord préfixe/suffixe (`Tour` + `rang`, `Rang` + `tour`), `dans les 3 mailles suivantes`, `dans chaque coin`, `dans le brin arrière`, `dans l’arceau`, `dans la même maille`, `changer de couleur`, `tourner`, `joindre avec une mc`, `répéter jusqu’au marqueur`, `répéter jusqu’à la fin`.
+Non expliqué automatiquement : termes sans quantité, blocs sans `xN` ni `N fois`, parenthèses isolées `(18)`, imbrications, phrases libres, anglais, fuzzy matching, ponctuation inattendue, une seule action suivie de « jusqu’à la fin » ou de `, à répéter N fois`, **une seule action** dans `(1 ms) 8 fois` (simplification volontaire du jalon G : la notation existe dans les patrons, le parseur ne la prend pas encore en charge), combinaison `xN` + « jusqu’à la fin » ou `xN` + `, à répéter N fois` ou `(…) N fois` + un autre mécanisme de répétition, qualificatif avec `, à répéter N fois` ou à l’intérieur d’un bloc répété, `répéter 6 fois` sans `à`, `à répéter six fois`, deux totaux (`(6)[6]`), texte dans les crochets (`[24 mailles]`), désaccord préfixe/suffixe (`Tour` + `rang`, `Rang` + `tour`), `dans les 3 mailles suivantes`, `dans chaque coin`, `dans le brin arrière`, `dans l’arceau`, `dans la même maille`, `dans un anneau magique`, plages de tours (`Tours 6-9`), changements de couleur, mélange d’une séquence et d’un bloc répété, `changer de couleur`, `tourner`, `joindre avec une mc`, `répéter jusqu’au marqueur`, `répéter jusqu’à la fin`. Le parseur n’invente jamais un total : `[N]` et `(N)` sont recopiés tels quels.
 
 ### Recette manuelle d’accessibilité
 
@@ -251,8 +254,9 @@ Non expliqué automatiquement : termes sans quantité, blocs sans `xN`, parenth�
 4. Après chaque fermeture, vérifier que le focus revient exactement sur le terme qui a ouvert la fiche.
 5. Refaire ce parcours sur Safari ou un navigateur mobile si disponible.
 6. Si le `<dialog>` natif ne fournit pas ce comportement sur un navigateur cible : ne pas ajouter de bibliothèque ; noter le constat et corriger au minimum.
-7. Vérifier les deux cases **Afficher les aides** et **Explication débutant** au clavier (Tab, Espace). L’encadré pédagogique reste lisible sans survol ; le texte du patron ne change jamais. Sur une ligne avec qualificatif (`dans chaque maille`), la note de prudence apparaît ; sur une ligne jalon D sans qualificatif, elle n’apparaît pas.
+7. Vérifier les deux cases **Afficher les aides** et **Explication débutant** au clavier (Tab, Espace). L’encadré pédagogique reste lisible sans survol ; le texte du patron ne change jamais. Sur une ligne avec qualificatif (`dans chaque maille` ou `dans chaque m`), la note de prudence apparaît ; sur une ligne jalon D sans qualificatif, elle n’apparaît pas.
 8. Désactiver les aides cliquables : l’explication débutant reste visible. Désactiver l’explication : les termes cliquables restent. Recharger la page : les deux préférences sont conservées.
+9. Coller un patron amigurumi réel et vérifier : `Tour 3 : (1 ms, 1 aug) 8 fois [24]` et `Tour 11 : 1 ms dans chaque m [48]` sont expliqués ; le `m` de `dans chaque m` n’est pas cliquable ; `Tour 2 : 8 aug[2]` est expliqué (quantité + terme + `[2]` recopié, pas calculé) ; `Tour 2 : aug[2]`, `Tour 1 : 8 ms dans un anneau magique[1]`, `Tours 6-9 (4 tours) : 1 ms dans chaque m[3]` restent non expliqués (aucune liste partielle). Le total affiché est celui écrit dans le patron, jamais un calcul.
 
 ## Import JSON des termes
 

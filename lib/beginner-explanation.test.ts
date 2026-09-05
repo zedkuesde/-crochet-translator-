@@ -635,3 +635,333 @@ describe("parseBeginnerExplanation — jalon E refusés", () => {
     assert.equal(result.kind, "unsupported");
   });
 });
+
+describe("parseBeginnerExplanation — jalon G totaux [N]", () => {
+  it("explique Tour 3 : (1 ms, 1 aug) 8 fois [24]", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 3 : (1 ms, 1 aug) 8 fois [24]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.row, { kind: "tour", number: 3 });
+    assert.equal(result.repeatCount, 8);
+    assert.equal(result.expectedStitchCount, 24);
+    assert.deepEqual(
+      result.steps.map((step) => [step.quantity, step.term.code, step.term.label]),
+      [
+        [1, "ms", "Maille serrée"],
+        [1, "aug", "Augmentation"],
+      ],
+    );
+
+    assert.deepEqual(toBeginnerExplanationCopy(result), {
+      rowIntro: "Pour le tour 3 :",
+      repeatIntro: "Répète 8 fois :",
+      actionLines: ["Fais 1 × Maille serrée.", "Fais 1 × Augmentation."],
+      expectedStitchCountLine:
+        "Le patron indique 24 mailles à la fin de ce tour.",
+    });
+  });
+
+  it("explique Tour 4 : (2 ms, 1 aug) 8 fois[32]", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 4 : (2 ms, 1 aug) 8 fois[32]",
+      terms,
+    );
+    assertExplained(result);
+    assert.equal(result.repeatCount, 8);
+    assert.equal(result.expectedStitchCount, 32);
+    assert.equal(result.steps.length, 2);
+  });
+
+  it("explique Tour 20 : (2 ms, 1 dim) 2 fois[24] avec le total écrit", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 20 : (2 ms, 1 dim) 2 fois[24]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.row, { kind: "tour", number: 20 });
+    assert.equal(result.repeatCount, 2);
+    assert.equal(result.expectedStitchCount, 24);
+    assert.deepEqual(
+      result.steps.map((step) => [step.quantity, step.term.code]),
+      [
+        [2, "ms"],
+        [1, "dim"],
+      ],
+    );
+    assert.equal(
+      toBeginnerExplanationCopy(result).expectedStitchCountLine,
+      "Le patron indique 24 mailles à la fin de ce tour.",
+    );
+  });
+
+  it("sépare le bloc [actions] xN du total final collé [1 ms, 1 aug] x8[24]", () => {
+    const result = parseBeginnerExplanation("[1 ms, 1 aug] x8[24]", terms);
+    assertExplained(result);
+    assert.equal(result.repeatCount, 8);
+    assert.equal(result.expectedStitchCount, 24);
+    assert.equal(result.steps.length, 2);
+    assert.equal(result.steps[0]?.term.code, "ms");
+    assert.equal(result.steps[1]?.term.code, "aug");
+  });
+
+  it("sépare le bloc [actions] xN du total final espacé [1 ms, 1 aug] x8 [24]", () => {
+    const result = parseBeginnerExplanation("[1 ms, 1 aug] x8 [24]", terms);
+    assertExplained(result);
+    assert.equal(result.repeatCount, 8);
+    assert.equal(result.expectedStitchCount, 24);
+    assert.equal(result.steps.length, 2);
+  });
+
+  it("rejette deux totaux 1 ms (6)[6] comme ambigus", () => {
+    const result = parseBeginnerExplanation("1 ms (6)[6]", terms);
+    assert.deepEqual(result, { kind: "unsupported", reason: "ambiguous" });
+  });
+
+  it("rejette deux totaux 1 ms [6](6) comme ambigus", () => {
+    const result = parseBeginnerExplanation("1 ms [6](6)", terms);
+    assert.deepEqual(result, { kind: "unsupported", reason: "ambiguous" });
+  });
+
+  it("rejette [24 mailles]", () => {
+    const result = parseBeginnerExplanation("[24 mailles]", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette un crochet de total incomplet [24", () => {
+    const result = parseBeginnerExplanation("1 ms [24", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette du texte après le crochet de total", () => {
+    const result = parseBeginnerExplanation("1 ms [24].", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+});
+
+describe("parseBeginnerExplanation — jalon G (actions) N fois", () => {
+  it("explique (1 ms, 1 aug) 8 fois sans préfixe ni total", () => {
+    const result = parseBeginnerExplanation("(1 ms, 1 aug) 8 fois", terms);
+    assertExplained(result);
+    assert.equal(result.repeatCount, 8);
+    assert.equal(result.expectedStitchCount, undefined);
+    assert.equal(result.steps.length, 2);
+  });
+
+  it("accepte la casse FOIS", () => {
+    const result = parseBeginnerExplanation("(1 ms, 1 aug) 8 FOIS", terms);
+    assertExplained(result);
+    assert.equal(result.repeatCount, 8);
+  });
+
+  it("accepte les espaces optionnels (1 ms, 1 aug)8fois", () => {
+    const result = parseBeginnerExplanation("(1 ms, 1 aug)8fois", terms);
+    assertExplained(result);
+    assert.equal(result.repeatCount, 8);
+  });
+
+  it("rejette (1 ms) 8 fois — une seule action, simplification volontaire", () => {
+    const result = parseBeginnerExplanation("(1 ms) 8 fois", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette (1 ms, 1 aug) x8 fois", () => {
+    const result = parseBeginnerExplanation("(1 ms, 1 aug) x8 fois", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette (1 ms, 1 aug) huit fois", () => {
+    const result = parseBeginnerExplanation("(1 ms, 1 aug) huit fois", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette (1 ms, 1 aug) 8 fois de plus", () => {
+    const result = parseBeginnerExplanation(
+      "(1 ms, 1 aug) 8 fois de plus",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette (1 ms, 1 aug) 8 fois.", () => {
+    const result = parseBeginnerExplanation("(1 ms, 1 aug) 8 fois.", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette (1 ms, 1 aug) 8 sans fois", () => {
+    const result = parseBeginnerExplanation("(1 ms, 1 aug) 8", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette (1 ms, 1 aug) fois sans nombre", () => {
+    const result = parseBeginnerExplanation("(1 ms, 1 aug) fois", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette un qualificatif dans le bloc (1 ms dans chaque maille, 1 aug) 8 fois", () => {
+    const result = parseBeginnerExplanation(
+      "(1 ms dans chaque maille, 1 aug) 8 fois",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette (1 ms, 1 aug) 8 fois, à répéter 8 fois", () => {
+    const result = parseBeginnerExplanation(
+      "(1 ms, 1 aug) 8 fois, à répéter 8 fois",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette (1 ms, 1 aug) 8 fois jusqu’à la fin du tour", () => {
+    const result = parseBeginnerExplanation(
+      "(1 ms, 1 aug) 8 fois jusqu’à la fin du tour",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette *1 ms, 1 aug* x8 8 fois", () => {
+    const result = parseBeginnerExplanation("*1 ms, 1 aug* x8 8 fois", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+});
+
+describe("parseBeginnerExplanation — jalon G m contextuel", () => {
+  it("explique Tour 11 : 1 ms dans chaque m [48]", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 11 : 1 ms dans chaque m [48]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.row, { kind: "tour", number: 11 });
+    assert.equal(result.repeatCount, undefined);
+    assert.equal(result.expectedStitchCount, 48);
+    assert.deepEqual(result.steps, [
+      {
+        quantity: 1,
+        term: { id: "ms", code: "ms", label: "Maille serrée" },
+        qualifier: "each-stitch",
+      },
+    ]);
+
+    assert.deepEqual(toBeginnerExplanationCopy(result), {
+      rowIntro: "Pour le tour 11 :",
+      actionLines: ["Fais 1 × Maille serrée dans chaque maille."],
+      positionCautionNote: POSITION_QUALIFIER_NOTE,
+      expectedStitchCountLine:
+        "Le patron indique 48 mailles à la fin de ce tour.",
+    });
+  });
+
+  it("explique 2 ms dans toutes les m avec le libellé canonique", () => {
+    const result = parseBeginnerExplanation("2 ms dans toutes les m", terms);
+    assertExplained(result);
+    assert.equal(result.steps[0]?.qualifier, "each-stitch");
+    assert.equal(
+      toBeginnerExplanationCopy(result).actionLines[0],
+      "Fais 2 × Maille serrée dans chaque maille.",
+    );
+  });
+
+  it("rejette dans la m suivante", () => {
+    const result = parseBeginnerExplanation("1 ms dans la m suivante", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 1 ms dans chaque m.", () => {
+    const result = parseBeginnerExplanation("1 ms dans chaque m.", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 1 ms dans chaque ms", () => {
+    const result = parseBeginnerExplanation("1 ms dans chaque ms", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette dans 2 m", () => {
+    const result = parseBeginnerExplanation("1 ms dans 2 m", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette m isolé", () => {
+    const result = parseBeginnerExplanation("m", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette 1 m comme terme", () => {
+    const result = parseBeginnerExplanation("1 m", terms);
+    assert.deepEqual(result, { kind: "unsupported", reason: "unknown-term" });
+  });
+});
+
+describe("parseBeginnerExplanation — jalon G hors scope réel", () => {
+  it("rejette Tour 1 : 8 ms dans un anneau magique[1]", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : 8 ms dans un anneau magique[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("explique Tour 2 : 8 aug[2] — quantité + terme + total écrit, sans calcul", () => {
+    const result = parseBeginnerExplanation("Tour 2 : 8 aug[2]", terms);
+    assertExplained(result);
+    assert.deepEqual(result.row, { kind: "tour", number: 2 });
+    assert.equal(result.repeatCount, undefined);
+    assert.equal(result.expectedStitchCount, 2);
+    assert.deepEqual(result.steps, [
+      {
+        quantity: 8,
+        term: { id: "aug", code: "aug", label: "Augmentation" },
+      },
+    ]);
+  });
+
+  it("rejette Tour 2 : aug[2] sans quantité", () => {
+    const result = parseBeginnerExplanation("Tour 2 : aug[2]", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Tours 6-9 (4 tours) : 1 ms dans chaque m[3]", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : 1 ms dans chaque m[3]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Tour 12 avec changements de couleur", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 12 : 15 ms ; fil blanc : 5 ms ; fil orange : 18 ms",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Tour 15 mélange séquence et bloc répété", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 15 : 7 ms, 1 aug, 4 ms, 1 aug, (7 ms, 1 aug) 2 fois, 1 ms, 1 aug, 7 ms, 1 aug[6]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Tour 29 brins arrière", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 29 : travailler dans les brins arrière uniquement : (6 ms, 1 aug) 6 fois",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Tours 30-32 (3 tours) : 1 ms dans chaque m", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 30-32 (3 tours) : 1 ms dans chaque m",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+});

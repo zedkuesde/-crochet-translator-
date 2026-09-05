@@ -56,10 +56,13 @@ export const POSITION_QUALIFIER_NOTE =
 const WHITESPACE = /\s/u;
 const NESTED_DELIMITER = /[*[\]()]/u;
 const NUMERIC_PARENS = /\(\s*[1-9]\d{0,3}\s*\)/u;
+const NUMERIC_BRACKETS = /\[\s*[1-9]\d{0,3}\s*\]/u;
 const ROW_PREFIX_RE =
   /^(?:rang\s+([1-9]\d{0,2})|tour\s+([1-9]\d{0,2})|r([1-9]\d{0,2})|t([1-9]\d{0,2}))\s*:\s*/iu;
 const TRAILING_COUNT_RE = /\(\s*([1-9]\d{0,3})\s*\)\s*$/u;
+const TRAILING_BRACKET_COUNT_RE = /\[\s*([1-9]\d{0,3})\s*\]\s*$/u;
 const MULTIPLIER_RE = /^\s*[x×]\s*([1-9]\d{0,2})\s*$/iu;
+const FRENCH_TIMES_RE = /^\s*([1-9]\d{0,2})\s*fois\s*$/iu;
 const QUANTITY_RE = /^([1-9]\d{0,2})/u;
 const UNTIL_END_RE = /\s+jusqu['’]à\s+la\s+fin\s+du\s+(rang|tour)\s*$/iu;
 const REPEAT_PHRASE_RE = /,\s*à\s+répéter\s+([1-9]\d{0,2})\s+fois\s*$/iu;
@@ -73,6 +76,8 @@ const QUALIFIER_PHRASES: ReadonlyArray<{
   { folded: "dans toutes les mailles", qualifier: "each-stitch" },
   { folded: "dans la maille suivante", qualifier: "next-stitch" },
   { folded: "dans la prochaine maille", qualifier: "next-stitch" },
+  { folded: "dans chaque m", qualifier: "each-stitch" },
+  { folded: "dans toutes les m", qualifier: "each-stitch" },
 ];
 
 type ParseFailure = {
@@ -131,13 +136,15 @@ function parseRowPrefix(text: string): {
 function splitTrailingCount(text: string):
   | { body: string; expectedStitchCount?: number }
   | { ambiguous: true } {
-  const match = TRAILING_COUNT_RE.exec(text);
+  const parenMatch = TRAILING_COUNT_RE.exec(text);
+  const bracketMatch = TRAILING_BRACKET_COUNT_RE.exec(text);
+  const match = parenMatch ?? bracketMatch;
   if (!match || match.index === undefined) {
     return { body: text };
   }
 
   const body = text.slice(0, match.index).trimEnd();
-  if (NUMERIC_PARENS.test(body)) {
+  if (NUMERIC_PARENS.test(body) || NUMERIC_BRACKETS.test(body)) {
     return { ambiguous: true };
   }
 
@@ -319,7 +326,8 @@ function tryParseRepeatBlock(
 
   const after = trimmed.slice(closeIndex + 1);
   const multiplier = MULTIPLIER_RE.exec(after);
-  if (!multiplier) {
+  const frenchTimes = opener === "(" ? FRENCH_TIMES_RE.exec(after) : null;
+  if (!multiplier && !frenchTimes) {
     return null;
   }
 
@@ -337,10 +345,22 @@ function tryParseRepeatBlock(
     return { kind: "error", reason: "unsupported-syntax" };
   }
 
+  if (frenchTimes) {
+    if (sequence.steps.length < 2) {
+      return { kind: "error", reason: "unsupported-syntax" };
+    }
+
+    return {
+      kind: "ok",
+      steps: sequence.steps,
+      repeatCount: Number.parseInt(frenchTimes[1] ?? "", 10),
+    };
+  }
+
   return {
     kind: "ok",
     steps: sequence.steps,
-    repeatCount: Number.parseInt(multiplier[1] ?? "", 10),
+    repeatCount: Number.parseInt(multiplier?.[1] ?? "", 10),
   };
 }
 
