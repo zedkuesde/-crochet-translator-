@@ -8,6 +8,8 @@ import {
 } from "@/components/PageShell";
 import { getAllTutorials } from "@/lib/tutorials";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Mes tutos — Crochet Translator",
 };

@@ -14,6 +14,7 @@ FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV DATABASE_URL=file:/tmp/build.sqlite
 # Regenerate after full source copy (build script also runs prisma generate)
 RUN npx prisma generate
 RUN npm run build
