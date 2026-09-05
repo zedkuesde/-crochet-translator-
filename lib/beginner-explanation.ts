@@ -30,6 +30,10 @@ export type RowScope =
       declaredCount: number;
     };
 
+export type ColorPrefix = {
+  color: string;
+};
+
 export type ExplanationPart =
   | {
       kind: "actions";
@@ -56,6 +60,7 @@ export type BeginnerExplanation =
   | {
       kind: "explained";
       scope?: RowScope;
+      colorPrefix?: ColorPrefix;
       parts: ExplanationPart[];
       expectedStitchCount?: number;
     }
@@ -76,6 +81,7 @@ export type ExplanationPartCopy = {
 
 export type BeginnerExplanationCopy = {
   rowIntro?: string;
+  colorLine?: string;
   parts: ExplanationPartCopy[];
   positionCautionNote?: string;
   expectedStitchCountLine?: string;
@@ -95,6 +101,9 @@ const ROW_PREFIX_RE =
   /^(?:rang\s+([1-9]\d{0,2})|tour\s+([1-9]\d{0,2})|r([1-9]\d{0,2})|t([1-9]\d{0,2}))\s*:\s*/iu;
 const ROW_RANGE_PREFIX_RE =
   /^(tours|rangs)\s+([1-9]\d{0,2})\s*[-–]\s*([1-9]\d{0,2})\s*\(\s*([1-9]\d{0,2})\s+(tours|rangs)\s*\)\s*:\s*/iu;
+const FIL_WORD_RE = /^\s*fil\b/iu;
+const COLOR_PREFIX_RE =
+  /^\s*fil\s+([\p{L}]+(?:[-\s]+[\p{L}]+)*)\s*:\s*/iu;
 const TRAILING_COUNT_RE = /\(\s*([1-9]\d{0,3})\s*\)\s*$/u;
 const TRAILING_BRACKET_COUNT_RE = /\[\s*([1-9]\d{0,3})\s*\]\s*$/u;
 const MULTIPLIER_RE = /^\s*[x×]\s*([1-9]\d{0,2})\s*$/iu;
@@ -335,6 +344,7 @@ function explainedResult(
   parts: ExplanationPart[],
   scope: RowScope | undefined,
   expectedStitchCount?: number,
+  colorPrefix?: ColorPrefix,
 ): Extract<BeginnerExplanation, { kind: "explained" }> {
   const explanation: Extract<BeginnerExplanation, { kind: "explained" }> = {
     kind: "explained",
@@ -344,11 +354,71 @@ function explainedResult(
   if (scope) {
     explanation.scope = scope;
   }
+  if (colorPrefix) {
+    explanation.colorPrefix = colorPrefix;
+  }
   if (expectedStitchCount !== undefined) {
     explanation.expectedStitchCount = expectedStitchCount;
   }
 
   return explanation;
+}
+
+function compactColorName(value: string): string {
+  return value.replace(/\s+/gu, " ").trim();
+}
+
+function hasIsolatedMultiplierToken(color: string): boolean {
+  return color.split(/[-\s]+/u).some((token) => /^[x×]$/iu.test(token));
+}
+
+function parseColorPrefix(text: string):
+  | { kind: "ok"; colorPrefix: ColorPrefix; rest: string }
+  | { kind: "absent"; rest: string }
+  | { kind: "error"; reason: Extract<ParseFailure, { ok: false }>["reason"] } {
+  if (!FIL_WORD_RE.test(text)) {
+    return { kind: "absent", rest: text };
+  }
+
+  const match = COLOR_PREFIX_RE.exec(text);
+  if (!match) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  const rawColor = match[1] ?? "";
+  if (rawColor.length === 0 || hasIsolatedMultiplierToken(rawColor)) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  const rest = text.slice(match[0].length);
+  if (rest.startsWith(":")) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  return {
+    kind: "ok",
+    colorPrefix: { color: compactColorName(rawColor) },
+    rest,
+  };
+}
+
+function consumeOptionalColorPrefix(afterPrefix: string):
+  | { ok: true; colorPrefix?: ColorPrefix; rest: string }
+  | { ok: false; reason: ParseFailure["reason"] } {
+  const parsed = parseColorPrefix(afterPrefix);
+  if (parsed.kind === "error") {
+    return { ok: false, reason: parsed.reason };
+  }
+
+  if (parsed.kind === "ok") {
+    return {
+      ok: true,
+      colorPrefix: parsed.colorPrefix,
+      rest: parsed.rest,
+    };
+  }
+
+  return { ok: true, rest: afterPrefix };
 }
 
 function parseActionQualifier(rest: string): ActionQualifier | null {
@@ -689,7 +759,19 @@ export function parseBeginnerExplanation(
 
   const prefix = parseRowPrefix(trimmed);
   const afterPrefix = prefix ? prefix.rest : trimmed;
-  const countSplit = splitTrailingCount(afterPrefix);
+  let colorPrefix: ColorPrefix | undefined;
+  let afterColor = afterPrefix;
+
+  if (prefix) {
+    const color = consumeOptionalColorPrefix(afterPrefix);
+    if (!color.ok) {
+      return { kind: "unsupported", reason: color.reason };
+    }
+    colorPrefix = color.colorPrefix;
+    afterColor = color.rest;
+  }
+
+  const countSplit = splitTrailingCount(afterColor);
 
   if ("ambiguous" in countSplit) {
     return { kind: "unsupported", reason: "ambiguous" };
@@ -754,6 +836,7 @@ export function parseBeginnerExplanation(
       ],
       prefix?.scope,
       countSplit.expectedStitchCount,
+      colorPrefix,
     );
   }
 
@@ -779,6 +862,7 @@ export function parseBeginnerExplanation(
       [{ kind: "repeat", count: phraseRepeatCount, steps: sequence.steps }],
       prefix?.scope,
       countSplit.expectedStitchCount,
+      colorPrefix,
     );
   }
 
@@ -795,6 +879,7 @@ export function parseBeginnerExplanation(
       [{ kind: "repeat", count: repeat.repeatCount, steps: repeat.steps }],
       prefix?.scope,
       countSplit.expectedStitchCount,
+      colorPrefix,
     );
   }
 
@@ -812,6 +897,7 @@ export function parseBeginnerExplanation(
       ],
       prefix?.scope,
       countSplit.expectedStitchCount,
+      colorPrefix,
     );
   }
 
@@ -828,6 +914,7 @@ export function parseBeginnerExplanation(
     [{ kind: "actions", steps: sequence.steps }],
     prefix?.scope,
     countSplit.expectedStitchCount,
+    colorPrefix,
   );
 }
 
@@ -836,7 +923,12 @@ function parseRangeExplanation(
   afterPrefix: string,
   matchAt: TermMatcher,
 ): BeginnerExplanation {
-  const countSplit = splitTrailingCount(afterPrefix);
+  const color = consumeOptionalColorPrefix(afterPrefix);
+  if (!color.ok) {
+    return { kind: "unsupported", reason: color.reason };
+  }
+
+  const countSplit = splitTrailingCount(color.rest);
 
   if ("ambiguous" in countSplit) {
     return { kind: "unsupported", reason: "ambiguous" };
@@ -871,6 +963,7 @@ function parseRangeExplanation(
     ],
     scope,
     countSplit.expectedStitchCount,
+    color.colorPrefix,
   );
 }
 
@@ -963,6 +1056,10 @@ export function toBeginnerExplanationCopy(
     copy.rowIntro = `Pour le ${explanation.scope.rowKind} ${explanation.scope.number} :`;
   } else if (explanation.scope?.kind === "range") {
     copy.rowIntro = `Pour les ${pluralRowKind(explanation.scope.rowKind)} ${explanation.scope.from} à ${explanation.scope.to} :`;
+  }
+
+  if (explanation.colorPrefix) {
+    copy.colorLine = `Couleur : ${explanation.colorPrefix.color}`;
   }
 
   if (hasPositionQualifier(allExplainedSteps(explanation.parts))) {

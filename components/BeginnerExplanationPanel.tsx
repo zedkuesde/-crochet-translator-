@@ -45,6 +45,7 @@ export function BeginnerExplanationPanel({
 
       <div className="mt-3 flex flex-col gap-3 text-base leading-relaxed text-stone-800">
         {copy.rowIntro ? <p>{copy.rowIntro}</p> : null}
+        {copy.colorLine ? <p>{copy.colorLine}</p> : null}
 
         {copy.parts.map((part, partIndex) => {
           const useNumberedList =

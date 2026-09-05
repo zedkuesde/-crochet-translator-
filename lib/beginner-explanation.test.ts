@@ -1870,12 +1870,27 @@ describe("parseBeginnerExplanation — jalon J plages de tours/rangs", () => {
     assert.equal(result.kind, "unsupported");
   });
 
-  it("rejette un changement de couleur avant le corps", () => {
+  it("explique Tours 6-9 (4 tours) : fil blanc : 1 ms dans chaque m[1]", () => {
     const result = parseBeginnerExplanation(
       "Tours 6-9 (4 tours) : fil blanc : 1 ms dans chaque m[1]",
       terms,
     );
-    assert.equal(result.kind, "unsupported");
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "blanc" });
+    assert.deepEqual(result.scope, {
+      kind: "range",
+      rowKind: "tour",
+      from: 6,
+      to: 9,
+      declaredCount: 4,
+    });
+    assert.equal(result.expectedStitchCount, 1);
+    assert.equal(acrossRowsOf(result)?.declaredCount, 4);
+    assert.equal(toBeginnerExplanationCopy(result).colorLine, "Couleur : blanc");
+    assert.equal(
+      toBeginnerExplanationCopy(result).rowIntro,
+      "Pour les tours 6 à 9 :",
+    );
   });
 
   it("rejette un point-virgule / changement de couleur", () => {
@@ -1959,5 +1974,374 @@ describe("parseBeginnerExplanation — jalon J plages de tours/rangs", () => {
       expectedStitchCountLine:
         "Le patron indique 2 mailles à la fin de ce tour.",
     });
+  });
+});
+
+describe("parseBeginnerExplanation — jalon K couleur", () => {
+  it("explique Tour 2 : fil blanc : 2 ms dans chaque m (12)", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 2 : fil blanc : 2 ms dans chaque m (12)",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.scope, {
+      kind: "single",
+      rowKind: "tour",
+      number: 2,
+    });
+    assert.deepEqual(result.colorPrefix, { color: "blanc" });
+    assert.equal(result.expectedStitchCount, 12);
+    assert.deepEqual(allSteps(result), [
+      {
+        quantity: 2,
+        term: { id: "ms", code: "ms", label: "Maille serrée" },
+        qualifier: "each-stitch",
+      },
+    ]);
+
+    assert.deepEqual(toBeginnerExplanationCopy(result), {
+      rowIntro: "Pour le tour 2 :",
+      colorLine: "Couleur : blanc",
+      parts: [
+        { actionLines: ["Fais 2 × Maille serrée dans chaque maille."] },
+      ],
+      positionCautionNote: POSITION_QUALIFIER_NOTE,
+      expectedStitchCountLine:
+        "Le patron indique 12 mailles à la fin de ce tour.",
+    });
+  });
+
+  it("explique Tour 3 : (1 ms, 1 aug) 6 fois sans colorPrefix", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 3 : (1 ms, 1 aug) 6 fois",
+      terms,
+    );
+    assertExplained(result);
+    assert.equal(result.colorPrefix, undefined);
+    assert.equal(repeatCountOf(result), 6);
+    assert.deepEqual(toBeginnerExplanationCopy(result), {
+      rowIntro: "Pour le tour 3 :",
+      parts: [
+        {
+          heading: "Répète 6 fois :",
+          actionLines: ["Fais 1 × Maille serrée.", "Fais 1 × Augmentation."],
+        },
+      ],
+    });
+    assert.equal(toBeginnerExplanationCopy(result).colorLine, undefined);
+  });
+
+  it("explique Tour 1 : fil blanc : 6 ms dans un anneau magique", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : fil blanc : 6 ms dans un anneau magique",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "blanc" });
+    assert.equal(result.expectedStitchCount, undefined);
+    assert.equal(allSteps(result)[0]?.qualifier, "magic-ring");
+    assert.equal(toBeginnerExplanationCopy(result).colorLine, "Couleur : blanc");
+    assert.equal(
+      firstActionLines(toBeginnerExplanationCopy(result))[0],
+      "Fais 6 × Maille serrée dans un anneau magique.",
+    );
+  });
+
+  it("explique Tour 1 : fil blanc : 6 ms dans un anneau magique[1]", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : fil blanc : 6 ms dans un anneau magique[1]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "blanc" });
+    assert.equal(result.expectedStitchCount, 1);
+    assert.equal(
+      toBeginnerExplanationCopy(result).expectedStitchCountLine,
+      "Le patron indique 1 mailles à la fin de ce tour.",
+    );
+  });
+
+  it("explique Tour 6 : fil orange : 1 ms dans chaque m", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 6 : fil orange : 1 ms dans chaque m",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "orange" });
+    assert.equal(result.expectedStitchCount, undefined);
+    assert.equal(allSteps(result)[0]?.qualifier, "each-stitch");
+    assert.equal(toBeginnerExplanationCopy(result).colorLine, "Couleur : orange");
+    assert.equal(
+      toBeginnerExplanationCopy(result).expectedStitchCountLine,
+      undefined,
+    );
+  });
+
+  it("explique Tour 6 : fil orange : 1 ms dans chaque m[2]", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 6 : fil orange : 1 ms dans chaque m[2]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "orange" });
+    assert.equal(result.expectedStitchCount, 2);
+    assert.equal(
+      toBeginnerExplanationCopy(result).expectedStitchCountLine,
+      "Le patron indique 2 mailles à la fin de ce tour.",
+    );
+  });
+
+  it("explique Tour 21 : fil blanc : 1 ms dans chaque m[3]", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 21 : fil blanc : 1 ms dans chaque m[3]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "blanc" });
+    assert.equal(result.expectedStitchCount, 3);
+    assert.equal(allSteps(result)[0]?.qualifier, "each-stitch");
+  });
+
+  it("explique Tours 6-9 (4 tours) : fil blanc : 1 ms dans chaque m[4]", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : fil blanc : 1 ms dans chaque m[4]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "blanc" });
+    assert.deepEqual(result.scope, {
+      kind: "range",
+      rowKind: "tour",
+      from: 6,
+      to: 9,
+      declaredCount: 4,
+    });
+    assert.equal(result.expectedStitchCount, 4);
+    assert.deepEqual(toBeginnerExplanationCopy(result), {
+      rowIntro: "Pour les tours 6 à 9 :",
+      colorLine: "Couleur : blanc",
+      parts: [
+        {
+          heading: "Fais la même instruction pendant 4 tours :",
+          actionLines: ["Fais 1 × Maille serrée dans chaque maille."],
+        },
+      ],
+      positionCautionNote: POSITION_QUALIFIER_NOTE,
+      expectedStitchCountLine:
+        "Le patron indique 4 mailles pour cette plage de tours.",
+    });
+  });
+
+  it("explique Rangs 2-4 (3 rangs) : fil orange : 2 ms dans chaque maille (12)", () => {
+    const result = parseBeginnerExplanation(
+      "Rangs 2-4 (3 rangs) : fil orange : 2 ms dans chaque maille (12)",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "orange" });
+    assert.deepEqual(result.scope, {
+      kind: "range",
+      rowKind: "rang",
+      from: 2,
+      to: 4,
+      declaredCount: 3,
+    });
+    assert.equal(result.expectedStitchCount, 12);
+    assert.equal(toBeginnerExplanationCopy(result).colorLine, "Couleur : orange");
+    assert.equal(
+      toBeginnerExplanationCopy(result).expectedStitchCountLine,
+      "Le patron indique 12 mailles pour cette plage de rangs.",
+    );
+  });
+
+  it("accepte fil écru avec accent", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 2 : fil écru : 2 ms dans chaque m (12)",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "écru" });
+    assert.equal(toBeginnerExplanationCopy(result).colorLine, "Couleur : écru");
+    assert.equal(result.expectedStitchCount, 12);
+  });
+
+  it("accepte fil bleu nuit en plusieurs mots", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 2 : fil bleu nuit : 2 ms dans chaque m (12)",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "bleu nuit" });
+    assert.equal(
+      toBeginnerExplanationCopy(result).colorLine,
+      "Couleur : bleu nuit",
+    );
+  });
+
+  it("accepte fil bleu-nuit avec trait d’union", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 2 : fil bleu-nuit : 2 ms dans chaque m (12)",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "bleu-nuit" });
+    assert.equal(
+      toBeginnerExplanationCopy(result).colorLine,
+      "Couleur : bleu-nuit",
+    );
+  });
+
+  it("accepte fil rouge brique", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 2 : fil rouge brique : 2 ms dans chaque m (12)",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "rouge brique" });
+  });
+
+  it("explique le sandwich du Tour 4 avec couleur", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 4 : fil blanc : 1 ms, 1 aug, (1 ms, 1 aug) 5 fois, 1 ms, 1 aug",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "blanc" });
+    assert.equal(result.parts.length, 3);
+    assert.equal(repeatCountOf(result), 5);
+    assert.equal(toBeginnerExplanationCopy(result).colorLine, "Couleur : blanc");
+    assert.deepEqual(
+      toBeginnerExplanationCopy(result).parts.map((part) => part.heading),
+      [
+        "Avant la répétition :",
+        "Répète 5 fois :",
+        "Après la répétition :",
+      ],
+    );
+  });
+
+  it("accepte la casse FIL BLANC", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 2 : FIL BLANC : 2 ms dans chaque m (12)",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.colorPrefix, { color: "BLANC" });
+    assert.equal(toBeginnerExplanationCopy(result).colorLine, "Couleur : BLANC");
+  });
+
+  it("rejette Tour 1 : blanc : sans le mot fil", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : blanc : 6 ms dans un anneau magique",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Tour 1 : fil : sans nom de couleur", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : fil : 6 ms dans un anneau magique",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Tour 1 : fil blanc sans deux-points après la couleur", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : fil blanc 6 ms dans un anneau magique",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Tour 1 : fil blanc : : avec deux-points surnuméraire", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : fil blanc : : 6 ms dans un anneau magique",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette Tour 1 : fil blanc ; fil orange :", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : fil blanc ; fil orange : 6 ms dans un anneau magique",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette du texte résiduel après l’action", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : fil blanc : 6 ms dans un anneau magique  texte",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette du texte résiduel avant le total [1]", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 1 : fil blanc : 6 ms dans un anneau magique  texte[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette un x isolé comme nom de couleur", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 2 : fil x : 2 ms dans chaque m (12)",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette un × isolé comme nom de couleur", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 2 : fil × : 2 ms dans chaque m (12)",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette un chiffre dans le nom de couleur", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 2 : fil blanc 2 : 2 ms dans chaque m (12)",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette un préfixe couleur isolé sans rang ni plage", () => {
+    const result = parseBeginnerExplanation(
+      "fil blanc : 6 ms dans un anneau magique",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+    if (result.kind === "unsupported") {
+      assert.notEqual(result.reason, "empty");
+    }
+  });
+
+  it("conserve le refus du Tour 12 avec couleurs en milieu de ligne", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 12 : 15 ms ; fil blanc : 5 ms ; fil orange : 18 ms",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("conserve le refus du Tour 19 avec ; fil blanc", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 19 : 1 ms, 1 dim, 3 ms, 1 dim, 2 ms ; fil blanc : 1 ms, 1 dim, (3 ms, 1 dim) 2 fois, 2 ms[6]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("conserve le refus d’une plage avec ; fil blanc", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : 1 ms dans chaque m; fil blanc[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
   });
 });
