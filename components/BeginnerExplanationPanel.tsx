@@ -33,10 +33,6 @@ export function BeginnerExplanationPanel({
   }
 
   const copy = toBeginnerExplanationCopy(explanation);
-  const useNumberedList =
-    explanation.repeatCount !== undefined ||
-    explanation.repeatUntilEnd !== undefined ||
-    copy.actionLines.length > 1;
 
   return (
     <section
@@ -50,19 +46,26 @@ export function BeginnerExplanationPanel({
       <div className="mt-3 flex flex-col gap-3 text-base leading-relaxed text-stone-800">
         {copy.rowIntro ? <p>{copy.rowIntro}</p> : null}
 
-        {copy.repeatIntro ? <p>{copy.repeatIntro}</p> : null}
+        {copy.parts.map((part, partIndex) => {
+          const useNumberedList =
+            part.heading !== undefined || part.actionLines.length > 1;
 
-        {useNumberedList ? (
-          <ol className="list-decimal space-y-1 pl-6">
-            {copy.actionLines.map((line, index) => (
-              <li key={`${explanation.steps[index]?.term.id ?? index}-${index}`}>
-                {line}
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p>{copy.actionLines[0]}</p>
-        )}
+          return (
+            <div key={`${part.heading ?? "actions"}-${partIndex}`} className="flex flex-col gap-3">
+              {part.heading ? <p>{part.heading}</p> : null}
+
+              {useNumberedList ? (
+                <ol className="list-decimal space-y-1 pl-6">
+                  {part.actionLines.map((line, index) => (
+                    <li key={`${partIndex}-${index}`}>{line}</li>
+                  ))}
+                </ol>
+              ) : (
+                <p>{part.actionLines[0]}</p>
+              )}
+            </div>
+          );
+        })}
 
         {copy.positionCautionNote ? (
           <p className="text-sm leading-relaxed text-stone-600">

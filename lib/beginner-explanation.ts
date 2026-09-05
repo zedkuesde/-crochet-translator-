@@ -20,13 +20,27 @@ export type ExplainedAction = {
 
 export type RowKind = "rang" | "tour";
 
+export type ExplanationPart =
+  | {
+      kind: "actions";
+      steps: ExplainedAction[];
+    }
+  | {
+      kind: "repeat";
+      count: number;
+      steps: ExplainedAction[];
+    }
+  | {
+      kind: "repeat-until-end";
+      rowKind: RowKind;
+      steps: ExplainedAction[];
+    };
+
 export type BeginnerExplanation =
   | {
       kind: "explained";
       row?: { kind: RowKind; number: number };
-      repeatCount?: number;
-      repeatUntilEnd?: RowKind;
-      steps: ExplainedAction[];
+      parts: ExplanationPart[];
       expectedStitchCount?: number;
     }
   | {
@@ -39,10 +53,14 @@ export type BeginnerExplanation =
         | "unsupported-syntax";
     };
 
+export type ExplanationPartCopy = {
+  heading?: string;
+  actionLines: string[];
+};
+
 export type BeginnerExplanationCopy = {
   rowIntro?: string;
-  repeatIntro?: string;
-  actionLines: string[];
+  parts: ExplanationPartCopy[];
   positionCautionNote?: string;
   expectedStitchCountLine?: string;
 };
@@ -62,7 +80,8 @@ const ROW_PREFIX_RE =
 const TRAILING_COUNT_RE = /\(\s*([1-9]\d{0,3})\s*\)\s*$/u;
 const TRAILING_BRACKET_COUNT_RE = /\[\s*([1-9]\d{0,3})\s*\]\s*$/u;
 const MULTIPLIER_RE = /^\s*[x×]\s*([1-9]\d{0,2})\s*$/iu;
-const FRENCH_TIMES_RE = /^\s*([1-9]\d{0,2})\s*fois\s*$/iu;
+const FRENCH_TIMES_PREFIX_RE = /^\s*([1-9]\d{0,2})\s*fois(?=\s|,|$)/iu;
+const TIMES_TOKEN_RE = /[1-9]\d{0,2}\s*fois/giu;
 const QUANTITY_RE = /^([1-9]\d{0,2})/u;
 const UNTIL_END_RE = /\s+jusqu['’]à\s+la\s+fin\s+du\s+(rang|tour)\s*$/iu;
 const REPEAT_PHRASE_RE = /,\s*à\s+répéter\s+([1-9]\d{0,2})\s+fois\s*$/iu;
@@ -97,6 +116,16 @@ type ActionSequenceResult =
 
 type RepeatBlockResult =
   | { kind: "ok"; steps: ExplainedAction[]; repeatCount: number }
+  | { kind: "error"; reason: ParseFailure["reason"] };
+
+type SandwichResult =
+  | {
+      kind: "ok";
+      before: ExplainedAction[];
+      repeated: ExplainedAction[];
+      after: ExplainedAction[];
+      count: number;
+    }
   | { kind: "error"; reason: ParseFailure["reason"] };
 
 function foldPhrase(value: string): string {
@@ -196,6 +225,54 @@ function splitRepeatPhraseSuffix(body: string): {
 
 function hasResidualRepeatSyntax(text: string): boolean {
   return NESTED_DELIMITER.test(text) || RESIDUAL_MULTIPLIER_RE.test(text);
+}
+
+function consumeFrenchTimes(
+  text: string,
+): { count: number; rest: string } | null {
+  const match = FRENCH_TIMES_PREFIX_RE.exec(text);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    count: Number.parseInt(match[1] ?? "", 10),
+    rest: text.slice(match[0].length),
+  };
+}
+
+function countChar(text: string, char: string): number {
+  let count = 0;
+  for (const current of text) {
+    if (current === char) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function allExplainedSteps(parts: ExplanationPart[]): ExplainedAction[] {
+  return parts.flatMap((part) => part.steps);
+}
+
+function explainedResult(
+  parts: ExplanationPart[],
+  prefix: { row: { kind: RowKind; number: number } } | null,
+  expectedStitchCount?: number,
+): Extract<BeginnerExplanation, { kind: "explained" }> {
+  const explanation: Extract<BeginnerExplanation, { kind: "explained" }> = {
+    kind: "explained",
+    parts,
+  };
+
+  if (prefix) {
+    explanation.row = prefix.row;
+  }
+  if (expectedStitchCount !== undefined) {
+    explanation.expectedStitchCount = expectedStitchCount;
+  }
+
+  return explanation;
 }
 
 function parseActionQualifier(rest: string): ActionQualifier | null {
@@ -352,8 +429,10 @@ function tryParseRepeatBlock(
 
   const after = trimmed.slice(closeIndex + 1);
   const multiplier = MULTIPLIER_RE.exec(after);
-  const frenchTimes = opener === "(" ? FRENCH_TIMES_RE.exec(after) : null;
-  if (!multiplier && !frenchTimes) {
+  const frenchTimes = opener === "(" ? consumeFrenchTimes(after) : null;
+  const frenchTimesWhole =
+    frenchTimes && frenchTimes.rest.trim() === "" ? frenchTimes : null;
+  if (!multiplier && !frenchTimesWhole) {
     return null;
   }
 
@@ -371,7 +450,7 @@ function tryParseRepeatBlock(
     return { kind: "error", reason: "unsupported-syntax" };
   }
 
-  if (frenchTimes) {
+  if (frenchTimesWhole) {
     if (sequence.steps.length < 2) {
       return { kind: "error", reason: "unsupported-syntax" };
     }
@@ -379,7 +458,7 @@ function tryParseRepeatBlock(
     return {
       kind: "ok",
       steps: sequence.steps,
-      repeatCount: Number.parseInt(frenchTimes[1] ?? "", 10),
+      repeatCount: frenchTimesWhole.count,
     };
   }
 
@@ -387,6 +466,101 @@ function tryParseRepeatBlock(
     kind: "ok",
     steps: sequence.steps,
     repeatCount: Number.parseInt(multiplier?.[1] ?? "", 10),
+  };
+}
+
+function tryParseSandwichRepeat(
+  body: string,
+  matchAt: TermMatcher,
+): SandwichResult | null {
+  const trimmed = body.trim();
+  const openCount = countChar(trimmed, "(");
+  const closeCount = countChar(trimmed, ")");
+  if (openCount === 0 && closeCount === 0) {
+    return null;
+  }
+
+  if (openCount !== 1 || closeCount !== 1) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  const openIndex = trimmed.indexOf("(");
+  const closeIndex = trimmed.indexOf(")");
+  if (openIndex === -1 || closeIndex === -1 || closeIndex <= openIndex) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  const timesTokens = trimmed.match(TIMES_TOKEN_RE);
+  if (!timesTokens || timesTokens.length !== 1) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  const beforeRaw = trimmed.slice(0, openIndex);
+  const inner = trimmed.slice(openIndex + 1, closeIndex);
+  const afterBlock = trimmed.slice(closeIndex + 1);
+
+  const beforeTrimmed = beforeRaw.trim();
+  if (!beforeTrimmed.endsWith(",")) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  const beforeText = beforeTrimmed.slice(0, -1).trim();
+  if (beforeText.length === 0 || hasResidualRepeatSyntax(beforeText)) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  if (inner.trim().length === 0 || NESTED_DELIMITER.test(inner)) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  const consumed = consumeFrenchTimes(afterBlock);
+  if (!consumed) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  const afterTrimmed = consumed.rest.trim();
+  if (!afterTrimmed.startsWith(",")) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  const afterText = afterTrimmed.slice(1).trim();
+  if (afterText.length === 0 || hasResidualRepeatSyntax(afterText)) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  const beforeSeq = parseActionSequence(beforeText, matchAt);
+  if (!beforeSeq.ok) {
+    return { kind: "error", reason: beforeSeq.reason };
+  }
+
+  const innerSeq = parseActionSequence(inner, matchAt);
+  if (!innerSeq.ok) {
+    return { kind: "error", reason: innerSeq.reason };
+  }
+
+  if (innerSeq.steps.length < 2) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  const afterSeq = parseActionSequence(afterText, matchAt);
+  if (!afterSeq.ok) {
+    return { kind: "error", reason: afterSeq.reason };
+  }
+
+  if (
+    hasPositionQualifier(beforeSeq.steps) ||
+    hasPositionQualifier(innerSeq.steps) ||
+    hasPositionQualifier(afterSeq.steps)
+  ) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  return {
+    kind: "ok",
+    before: beforeSeq.steps,
+    repeated: innerSeq.steps,
+    after: afterSeq.steps,
+    count: consumed.count,
   };
 }
 
@@ -468,20 +642,17 @@ export function parseBeginnerExplanation(
       return { kind: "unsupported", reason: "unsupported-syntax" };
     }
 
-    const explanation: Extract<BeginnerExplanation, { kind: "explained" }> = {
-      kind: "explained",
-      steps: sequence.steps,
-      repeatUntilEnd,
-    };
-
-    if (prefix) {
-      explanation.row = prefix.row;
-    }
-    if (countSplit.expectedStitchCount !== undefined) {
-      explanation.expectedStitchCount = countSplit.expectedStitchCount;
-    }
-
-    return explanation;
+    return explainedResult(
+      [
+        {
+          kind: "repeat-until-end",
+          rowKind: repeatUntilEnd,
+          steps: sequence.steps,
+        },
+      ],
+      prefix,
+      countSplit.expectedStitchCount,
+    );
   }
 
   if (phraseRepeatCount !== undefined) {
@@ -502,60 +673,60 @@ export function parseBeginnerExplanation(
       return { kind: "unsupported", reason: "unsupported-syntax" };
     }
 
-    const explanation: Extract<BeginnerExplanation, { kind: "explained" }> = {
-      kind: "explained",
-      steps: sequence.steps,
-      repeatCount: phraseRepeatCount,
-    };
-
-    if (prefix) {
-      explanation.row = prefix.row;
-    }
-    if (countSplit.expectedStitchCount !== undefined) {
-      explanation.expectedStitchCount = countSplit.expectedStitchCount;
-    }
-
-    return explanation;
+    return explainedResult(
+      [{ kind: "repeat", count: phraseRepeatCount, steps: sequence.steps }],
+      prefix,
+      countSplit.expectedStitchCount,
+    );
   }
 
   if (repeat?.kind === "error") {
     return { kind: "unsupported", reason: repeat.reason };
   }
 
-  let steps: ExplainedAction[];
-  let repeatCount: number | undefined;
-
   if (repeat?.kind === "ok") {
-    steps = repeat.steps;
-    repeatCount = repeat.repeatCount;
-  } else {
-    const sequence = parseActionSequence(remaining, matchAt);
-    if (!sequence.ok) {
-      return { kind: "unsupported", reason: sequence.reason };
+    if (isMagicRingMisused(repeat.steps, { repeatCount: repeat.repeatCount })) {
+      return { kind: "unsupported", reason: "unsupported-syntax" };
     }
-    steps = sequence.steps;
+
+    return explainedResult(
+      [{ kind: "repeat", count: repeat.repeatCount, steps: repeat.steps }],
+      prefix,
+      countSplit.expectedStitchCount,
+    );
   }
 
-  if (isMagicRingMisused(steps, { repeatCount })) {
+  const sandwich = tryParseSandwichRepeat(remaining, matchAt);
+  if (sandwich?.kind === "error") {
+    return { kind: "unsupported", reason: sandwich.reason };
+  }
+
+  if (sandwich?.kind === "ok") {
+    return explainedResult(
+      [
+        { kind: "actions", steps: sandwich.before },
+        { kind: "repeat", count: sandwich.count, steps: sandwich.repeated },
+        { kind: "actions", steps: sandwich.after },
+      ],
+      prefix,
+      countSplit.expectedStitchCount,
+    );
+  }
+
+  const sequence = parseActionSequence(remaining, matchAt);
+  if (!sequence.ok) {
+    return { kind: "unsupported", reason: sequence.reason };
+  }
+
+  if (isMagicRingMisused(sequence.steps)) {
     return { kind: "unsupported", reason: "unsupported-syntax" };
   }
 
-  const explanation: Extract<BeginnerExplanation, { kind: "explained" }> = {
-    kind: "explained",
-    steps,
-  };
-
-  if (prefix) {
-    explanation.row = prefix.row;
-  }
-  if (repeatCount !== undefined) {
-    explanation.repeatCount = repeatCount;
-  }
-  if (countSplit.expectedStitchCount !== undefined) {
-    explanation.expectedStitchCount = countSplit.expectedStitchCount;
-  }
-
-  return explanation;
+  return explainedResult(
+    [{ kind: "actions", steps: sequence.steps }],
+    prefix,
+    countSplit.expectedStitchCount,
+  );
 }
 
 export function formatActionLine(action: ExplainedAction): string {
@@ -580,32 +751,72 @@ export function formatExpectedStitchCountLine(
   return `Le patron indique ${count} mailles à la fin de l’instruction.`;
 }
 
+function isSandwichParts(parts: ExplanationPart[]): boolean {
+  return (
+    parts.length === 3 &&
+    parts[0]?.kind === "actions" &&
+    parts[1]?.kind === "repeat" &&
+    parts[2]?.kind === "actions"
+  );
+}
+
+function headingForPart(
+  part: ExplanationPart,
+  index: number,
+  sandwich: boolean,
+): string | undefined {
+  if (part.kind === "repeat") {
+    return `Répète ${part.count} fois :`;
+  }
+
+  if (part.kind === "repeat-until-end") {
+    return `Répète jusqu’à la fin du ${part.rowKind} :`;
+  }
+
+  if (sandwich && index === 0) {
+    return "Avant la répétition :";
+  }
+
+  if (sandwich && index === 2) {
+    return "Après la répétition :";
+  }
+
+  return undefined;
+}
+
 export function toBeginnerExplanationCopy(
   explanation: Extract<BeginnerExplanation, { kind: "explained" }>,
 ): BeginnerExplanationCopy {
+  const sandwich = isSandwichParts(explanation.parts);
   const copy: BeginnerExplanationCopy = {
-    actionLines: explanation.steps.map(formatActionLine),
+    parts: explanation.parts.map((part, index) => {
+      const heading = headingForPart(part, index, sandwich);
+      const partCopy: ExplanationPartCopy = {
+        actionLines: part.steps.map(formatActionLine),
+      };
+      if (heading) {
+        partCopy.heading = heading;
+      }
+      return partCopy;
+    }),
   };
 
   if (explanation.row) {
     copy.rowIntro = `Pour le ${explanation.row.kind} ${explanation.row.number} :`;
   }
 
-  if (explanation.repeatUntilEnd) {
-    copy.repeatIntro = `Répète jusqu’à la fin du ${explanation.repeatUntilEnd} :`;
-  } else if (explanation.repeatCount !== undefined) {
-    copy.repeatIntro = `Répète ${explanation.repeatCount} fois :`;
-  }
-
-  if (hasPositionQualifier(explanation.steps)) {
+  if (hasPositionQualifier(allExplainedSteps(explanation.parts))) {
     copy.positionCautionNote = POSITION_QUALIFIER_NOTE;
   }
 
   if (explanation.expectedStitchCount !== undefined) {
+    const untilEnd = explanation.parts.find(
+      (part) => part.kind === "repeat-until-end",
+    );
     copy.expectedStitchCountLine = formatExpectedStitchCountLine(
       explanation.expectedStitchCount,
       explanation.row,
-      explanation.repeatUntilEnd,
+      untilEnd?.kind === "repeat-until-end" ? untilEnd.rowKind : undefined,
     );
   }
 
