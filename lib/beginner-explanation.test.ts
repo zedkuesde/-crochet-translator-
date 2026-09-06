@@ -2345,3 +2345,267 @@ describe("parseBeginnerExplanation — jalon K couleur", () => {
     assert.equal(result.kind, "unsupported");
   });
 });
+
+describe("parseBeginnerExplanation — jalon L séquence × N", () => {
+  const ms = {
+    quantity: 1,
+    term: { id: "ms", code: "ms", label: "Maille serrée" },
+  };
+  const aug = {
+    quantity: 1,
+    term: { id: "aug", code: "aug", label: "Augmentation" },
+  };
+
+  function assertSequenceRepeat(
+    result: BeginnerExplanation,
+    count: number,
+  ): asserts result is Extract<BeginnerExplanation, { kind: "explained" }> {
+    assertExplained(result);
+    assert.equal(result.parts.length, 1);
+    assert.deepEqual(result.parts[0], {
+      kind: "repeat",
+      count,
+      steps: [ms, aug],
+    });
+  }
+
+  it("explique le cas réel R3 : 1 ms, 1 aug × 6", () => {
+    const result = parseBeginnerExplanation("R3 : 1 ms, 1 aug × 6", terms);
+    assertSequenceRepeat(result, 6);
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "rang", number: 3 });
+    assert.equal(result.expectedStitchCount, undefined);
+    assert.equal(result.colorPrefix, undefined);
+
+    assert.deepEqual(toBeginnerExplanationCopy(result), {
+      rowIntro: "Pour le rang 3 :",
+      parts: [
+        {
+          heading: "Répète 6 fois :",
+          actionLines: ["Fais 1 × Maille serrée.", "Fais 1 × Augmentation."],
+        },
+      ],
+    });
+    assert.equal(toBeginnerExplanationCopy(result).positionCautionNote, undefined);
+  });
+
+  it("accepte x ASCII avec espaces R3 : 1 ms, 1 aug x 6", () => {
+    const result = parseBeginnerExplanation("R3 : 1 ms, 1 aug x 6", terms);
+    assertSequenceRepeat(result, 6);
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "rang", number: 3 });
+  });
+
+  it("accepte × collé R3 : 1 ms, 1 aug ×6", () => {
+    const result = parseBeginnerExplanation("R3 : 1 ms, 1 aug ×6", terms);
+    assertSequenceRepeat(result, 6);
+  });
+
+  it("accepte x collé R3 : 1 ms, 1 aug x6", () => {
+    const result = parseBeginnerExplanation("R3 : 1 ms, 1 aug x6", terms);
+    assertSequenceRepeat(result, 6);
+  });
+
+  it("accepte X majuscule selon la casse déjà utilisée par xN", () => {
+    const result = parseBeginnerExplanation("R3 : 1 ms, 1 aug X 6", terms);
+    assertSequenceRepeat(result, 6);
+  });
+
+  it("explique 1 ms, 1 aug × 6 sans préfixe", () => {
+    const result = parseBeginnerExplanation("1 ms, 1 aug × 6", terms);
+    assertSequenceRepeat(result, 6);
+    assert.equal(result.scope, undefined);
+    assert.equal(toBeginnerExplanationCopy(result).rowIntro, undefined);
+  });
+
+  it("explique Rang 3 : 1 ms, 1 aug × 6", () => {
+    const result = parseBeginnerExplanation("Rang 3 : 1 ms, 1 aug × 6", terms);
+    assertSequenceRepeat(result, 6);
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "rang", number: 3 });
+    assert.equal(toBeginnerExplanationCopy(result).rowIntro, "Pour le rang 3 :");
+  });
+
+  it("explique Tour 3 : 1 ms, 1 aug × 6", () => {
+    const result = parseBeginnerExplanation("Tour 3 : 1 ms, 1 aug × 6", terms);
+    assertSequenceRepeat(result, 6);
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 3 });
+    assert.equal(toBeginnerExplanationCopy(result).rowIntro, "Pour le tour 3 :");
+  });
+
+  it("explique T3 : 1 ms, 1 aug × 6", () => {
+    const result = parseBeginnerExplanation("T3 : 1 ms, 1 aug × 6", terms);
+    assertSequenceRepeat(result, 6);
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 3 });
+  });
+
+  it("recopie le total parenthésé 1 ms, 1 aug × 6 (18) sans le calculer", () => {
+    const result = parseBeginnerExplanation("1 ms, 1 aug × 6 (18)", terms);
+    assertSequenceRepeat(result, 6);
+    assert.equal(result.expectedStitchCount, 18);
+    assert.notEqual(result.expectedStitchCount, 12);
+    assert.equal(
+      toBeginnerExplanationCopy(result).expectedStitchCountLine,
+      "Le patron indique 18 mailles à la fin de l’instruction.",
+    );
+  });
+
+  it("recopie le total crochet [18] sans le calculer", () => {
+    const result = parseBeginnerExplanation("1 ms, 1 aug × 6 [18]", terms);
+    assertSequenceRepeat(result, 6);
+    assert.equal(result.expectedStitchCount, 18);
+    assert.notEqual(result.expectedStitchCount, 12);
+  });
+
+  it("recopie le total collé Tour 3 : 1 ms, 1 aug × 6[1]", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 3 : 1 ms, 1 aug × 6[1]",
+      terms,
+    );
+    assertSequenceRepeat(result, 6);
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 3 });
+    assert.equal(result.expectedStitchCount, 1);
+    assert.equal(
+      toBeginnerExplanationCopy(result).expectedStitchCountLine,
+      "Le patron indique 1 mailles à la fin de ce tour.",
+    );
+  });
+
+  it("explique Tour 2 : fil blanc : 1 ms, 1 aug × 6[1]", () => {
+    const result = parseBeginnerExplanation(
+      "Tour 2 : fil blanc : 1 ms, 1 aug × 6[1]",
+      terms,
+    );
+    assertSequenceRepeat(result, 6);
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "tour", number: 2 });
+    assert.deepEqual(result.colorPrefix, { color: "blanc" });
+    assert.equal(result.expectedStitchCount, 1);
+    assert.deepEqual(toBeginnerExplanationCopy(result), {
+      rowIntro: "Pour le tour 2 :",
+      colorLine: "Couleur : blanc",
+      parts: [
+        {
+          heading: "Répète 6 fois :",
+          actionLines: ["Fais 1 × Maille serrée.", "Fais 1 × Augmentation."],
+        },
+      ],
+      expectedStitchCountLine:
+        "Le patron indique 1 mailles à la fin de ce tour.",
+    });
+  });
+
+  it("rejette R3 : 1 ms × 6 — une seule action", () => {
+    const result = parseBeginnerExplanation("R3 : 1 ms × 6", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette R3 : 1 ms, 1 aug × 0", () => {
+    const result = parseBeginnerExplanation("R3 : 1 ms, 1 aug × 0", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette R3 : 1 ms, 1 aug × six", () => {
+    const result = parseBeginnerExplanation("R3 : 1 ms, 1 aug × six", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette R3 : 1 ms, 1 aug 6 sans symbole", () => {
+    const result = parseBeginnerExplanation("R3 : 1 ms, 1 aug 6", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette R3 : 1 ms, 1 aug × 6 texte", () => {
+    const result = parseBeginnerExplanation("R3 : 1 ms, 1 aug × 6 texte", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette R3 : 1 ms, 1 aug × 6.", () => {
+    const result = parseBeginnerExplanation("R3 : 1 ms, 1 aug × 6.", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette R3 : 1 ms, 1 aug × 6, 1 ms", () => {
+    const result = parseBeginnerExplanation("R3 : 1 ms, 1 aug × 6, 1 ms", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette R3 : 1 ms, 1 aug × 6 × 2", () => {
+    const result = parseBeginnerExplanation("R3 : 1 ms, 1 aug × 6 × 2", terms);
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette R3 : 1 ms, 1 aug × 6, à répéter 2 fois", () => {
+    const result = parseBeginnerExplanation(
+      "R3 : 1 ms, 1 aug × 6, à répéter 2 fois",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette R3 : 1 ms, 1 aug × 6 jusqu’à la fin du tour", () => {
+    const result = parseBeginnerExplanation(
+      "R3 : 1 ms, 1 aug × 6 jusqu’à la fin du tour",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette un qualificatif R3 : 1 ms dans chaque maille, 1 aug × 6", () => {
+    const result = parseBeginnerExplanation(
+      "R3 : 1 ms dans chaque maille, 1 aug × 6",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette R3 : 1 ms, 1 aug × 6  texte[1]", () => {
+    const result = parseBeginnerExplanation(
+      "R3 : 1 ms, 1 aug × 6  texte[1]",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("rejette la forme dans une plage Tours 6-9 (4 tours) : 1 ms, 1 aug × 6", () => {
+    const result = parseBeginnerExplanation(
+      "Tours 6-9 (4 tours) : 1 ms, 1 aug × 6",
+      terms,
+    );
+    assert.equal(result.kind, "unsupported");
+  });
+
+  it("laisse *1 ms, 1 aug* x6 au parseur encadré existant", () => {
+    const result = parseBeginnerExplanation("*1 ms, 1 aug* x6", terms);
+    assertExplained(result);
+    assert.equal(repeatCountOf(result), 6);
+    assert.equal(allSteps(result).length, 2);
+    assert.equal(result.parts.length, 1);
+    assert.equal(result.parts[0]?.kind, "repeat");
+  });
+
+  it("laisse [1 ms, 1 aug] ×6 au parseur encadré existant", () => {
+    const result = parseBeginnerExplanation("[1 ms, 1 aug] ×6", terms);
+    assertExplained(result);
+    assert.equal(repeatCountOf(result), 6);
+    assert.equal(allSteps(result).length, 2);
+    assert.equal(result.parts[0]?.kind, "repeat");
+  });
+
+  it("laisse (1 ms, 1 aug) 8 fois au parseur encadré existant", () => {
+    const result = parseBeginnerExplanation("(1 ms, 1 aug) 8 fois", terms);
+    assertExplained(result);
+    assert.equal(repeatCountOf(result), 8);
+    assert.equal(allSteps(result).length, 2);
+    assert.equal(result.parts[0]?.kind, "repeat");
+  });
+
+  it("conserve R3 : (1 ms, 1 aug) 8 fois[1] du jalon G", () => {
+    const result = parseBeginnerExplanation(
+      "R3 : (1 ms, 1 aug) 8 fois[1]",
+      terms,
+    );
+    assertExplained(result);
+    assert.deepEqual(result.scope, { kind: "single", rowKind: "rang", number: 3 });
+    assert.equal(repeatCountOf(result), 8);
+    assert.equal(result.expectedStitchCount, 1);
+    assert.equal(result.parts[0]?.kind, "repeat");
+    assert.equal(toBeginnerExplanationCopy(result).parts[0]?.heading, "Répète 8 fois :");
+  });
+});

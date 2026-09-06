@@ -107,6 +107,7 @@ const COLOR_PREFIX_RE =
 const TRAILING_COUNT_RE = /\(\s*([1-9]\d{0,3})\s*\)\s*$/u;
 const TRAILING_BRACKET_COUNT_RE = /\[\s*([1-9]\d{0,3})\s*\]\s*$/u;
 const MULTIPLIER_RE = /^\s*[x×]\s*([1-9]\d{0,2})\s*$/iu;
+const TRAILING_SEQUENCE_MULTIPLIER_RE = /[x×]\s*([1-9]\d{0,2})\s*$/iu;
 const FRENCH_TIMES_PREFIX_RE = /^\s*([1-9]\d{0,2})\s*fois(?=\s|,|$)/iu;
 const TIMES_TOKEN_RE = /[1-9]\d{0,2}\s*fois/giu;
 const QUANTITY_RE = /^([1-9]\d{0,2})/u;
@@ -632,6 +633,42 @@ function tryParseRepeatBlock(
   };
 }
 
+function tryParseTrailingSequenceMultiplier(
+  body: string,
+  matchAt: TermMatcher,
+): RepeatBlockResult | null {
+  const trimmed = body.trim();
+  const opener = trimmed[0] ?? "";
+  if (closerFor(opener)) {
+    return null;
+  }
+
+  const match = TRAILING_SEQUENCE_MULTIPLIER_RE.exec(trimmed);
+  if (!match || match.index === undefined) {
+    return null;
+  }
+
+  const before = trimmed.slice(0, match.index).trimEnd();
+  if (before.length === 0 || hasResidualRepeatSyntax(before)) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  const sequence = parseActionSequence(before, matchAt);
+  if (!sequence.ok) {
+    return { kind: "error", reason: sequence.reason };
+  }
+
+  if (sequence.steps.length < 2 || hasPositionQualifier(sequence.steps)) {
+    return { kind: "error", reason: "unsupported-syntax" };
+  }
+
+  return {
+    kind: "ok",
+    steps: sequence.steps,
+    repeatCount: Number.parseInt(match[1] ?? "", 10),
+  };
+}
+
 function tryParseSandwichRepeat(
   body: string,
   matchAt: TermMatcher,
@@ -860,6 +897,34 @@ export function parseBeginnerExplanation(
 
     return explainedResult(
       [{ kind: "repeat", count: phraseRepeatCount, steps: sequence.steps }],
+      prefix?.scope,
+      countSplit.expectedStitchCount,
+      colorPrefix,
+    );
+  }
+
+  const trailingRepeat = tryParseTrailingSequenceMultiplier(remaining, matchAt);
+  if (trailingRepeat?.kind === "error") {
+    return { kind: "unsupported", reason: trailingRepeat.reason };
+  }
+
+  if (trailingRepeat?.kind === "ok") {
+    if (
+      isMagicRingMisused(trailingRepeat.steps, {
+        repeatCount: trailingRepeat.repeatCount,
+      })
+    ) {
+      return { kind: "unsupported", reason: "unsupported-syntax" };
+    }
+
+    return explainedResult(
+      [
+        {
+          kind: "repeat",
+          count: trailingRepeat.repeatCount,
+          steps: trailingRepeat.steps,
+        },
+      ],
       prefix?.scope,
       countSplit.expectedStitchCount,
       colorPrefix,
